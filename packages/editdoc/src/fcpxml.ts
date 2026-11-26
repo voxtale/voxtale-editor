@@ -1,4 +1,4 @@
-// Resolve hand-off with zooms: EditDoc → FCPXML 1.9. Unlike OTIO, FCPXML
+// Adapter: export timeline → FCPXML 1.9 (Final Cut Pro; Resolve reads it too). Unlike OTIO, FCPXML
 // carries clip transforms, so each a-roll clip gets its slice of the zoom
 // track as scale/position keyframes; a zoom across a cut splits cleanly.
 // Units (fallback reading of Apple's spec, unverified in Resolve): position
@@ -6,12 +6,10 @@
 // keyframe times are in the clip's own source time (its `start` plus the
 // offset into it). Two keys can't share a time, so the closing key of a jump
 // moves one frame earlier.
-import { lanes, zoomKeysBetween, type Easing, type ZoomKey } from "./render";
-import { fpsValue, toFrame, type Fps } from "./time";
-import type { OtioMedia } from "./otio";
-import type { ClipItem, ClipRef, EditDoc, Item } from "./schema";
-
-const live = <T extends Item>(items: T[]) => items.filter(i => i.status !== "suggested");
+import type { Easing, ZoomKey } from "./render";
+import { toFrame, type Fps } from "./time";
+import type { EditDoc } from "./schema";
+import { buildExportTimeline, placePicture, titleMarkers, type ExportClip, type ExportMedia, type ExportSource, type ExportTimeline } from "./export-model";
 
 // ---- rational time ------------------------------------------------------------
 
@@ -55,9 +53,7 @@ interface ZoomPoint { frame: number; scale: number; x: number; y: number; interp
  * The zoom track over one a-roll clip as `adjust-transform`. Plain attributes
  * when the clip holds one zoom; keyframes when it moves; nothing when wide.
  */
-function transformFor(doc: EditDoc, item: ClipItem, sourceStart: Rt): string | undefined {
-  const { height } = doc.canvas;
-  const keys = zoomKeysBetween(doc.tracks.zoom ?? [], item.start, item.end, doc.canvas);
+function transformFor(keys: ZoomKey[], fps: Fps, height: number, sourceStart: Rt): string | undefined {
   if (!keys.length) return undefined;
   const shifted = keys.some(k => k.property !== "scale");
   const step = shifted ? 3 : 1;
@@ -66,7 +62,7 @@ function transformFor(doc: EditDoc, item: ClipItem, sourceStart: Rt): string | u
   for (let i = 0; i < keys.length; i += step) {
     const chunk = keys.slice(i, i + step);
     points.push({
-      frame: toFrame(chunk[0]!.time, doc.fps),
+      frame: toFrame(chunk[0]!.time, fps),
       scale: pick(chunk, "scale"),
       // Canvas px with y down → percent of frame height with y up.
       x: (pick(chunk, "position.x") / height) * 100,
@@ -75,7 +71,7 @@ function transformFor(doc: EditDoc, item: ClipItem, sourceStart: Rt): string | u
     });
     const next = keys[i + step];
     if (chunk[0]!.easing === "hold" && next) {
-      const p = points.at(-1)!, f = toFrame(next.time, doc.fps) - 1;
+      const p = points.at(-1)!, f = toFrame(next.time, fps) - 1;
       if (f > p.frame) points.push({ ...p, frame: f });
     }
   }
@@ -100,7 +96,7 @@ function transformFor(doc: EditDoc, item: ClipItem, sourceStart: Rt): string | u
     out.push({ ...p });
   }
   const kf = (value: (p: ZoomPoint) => string) => el("keyframeAnimation", {}, out.map(p =>
-    el("keyframe", { time: str(add(sourceStart, frames(p.frame, doc.fps))), value: value(p), interp: p.interp })));
+    el("keyframe", { time: str(add(sourceStart, frames(p.frame, fps))), value: value(p), interp: p.interp })));
   const params = [el("param", { name: "scale" }, [kf(scl)])];
   if (shifted) params.unshift(el("param", { name: "position" }, [kf(pos)]));
   return el("adjust-transform", { position: pos(out[0]!), scale: scl(out[0]!) }, params);
@@ -108,18 +104,42 @@ function transformFor(doc: EditDoc, item: ClipItem, sourceStart: Rt): string | u
 
 // ---- export -----------------------------------------------------------------------
 
-interface SpineSlot { offset: Rt; startSec: number; endSec: number; localStart: Rt; tag: "asset-clip" | "gap"; attrs: Record<string, string | undefined>; head: string[]; anchored: string[]; markers: string[] }
+interface SpineSlot { offset: Rt; start: number; end: number; localStart: Rt; tag: "asset-clip" | "gap"; attrs: Record<string, string | undefined>; head: string[]; anchored: string[]; markers: string[] }
 
 /**
- * FCPXML 1.9 for Resolve's File > Import > Timeline. Spine: a-roll with gaps.
- * Connected above: b-roll, then graphics (alpha ProRes). Below: voiceover,
- * music, SFX. Markers: chapters as chapter markers, notes and text items as
- * markers. Captions travel as SRT (`toSrt`).
+ * Box, crop and fit as conform + transform + crop. Units as in `transformFor`
+ * (position % of frame height, y up; scale over the conformed size); the trim
+ * rect is % of the source per edge. Unverified in any app.
  */
-export function toFcpxml(doc: EditDoc, media: OtioMedia): string {
-  const fps = doc.fps;
-  const clips = new Map(doc.clips.map(c => [c.id, c]));
-  const seq = (s: number) => frames(toFrame(s, fps), fps);
+function placeXml(s: ExportSource, canvas: { width: number; height: number }, p: NonNullable<ExportClip["picture"]>): string[] {
+  if (!p.box && !p.crop) return [el("adjust-conform", { type: p.fit === "contain" ? "fit" : "fill" })];
+  const { rect, view } = placePicture(s, canvas, p);
+  const k = Math.min(canvas.width / s.width, canvas.height / s.height);
+  const sc = rect.width / (s.width * k);
+  const x = ((rect.x + rect.width / 2 - canvas.width / 2) / canvas.height) * 100;
+  const y = (-(rect.y + rect.height / 2 - canvas.height / 2) / canvas.height) * 100;
+  const pct = (v: number) => num(Math.max(0, v) * 100);
+  return [
+    el("adjust-crop", { mode: "trim" }, [el("trim-rect", {
+      left: pct((view.x - rect.x) / rect.width), right: pct((rect.x + rect.width - view.x - view.width) / rect.width),
+      top: pct((view.y - rect.y) / rect.height), bottom: pct((rect.y + rect.height - view.y - view.height) / rect.height),
+    })]),
+    el("adjust-conform", { type: "fit" }),
+    el("adjust-transform", { position: `${num(x)} ${num(y)}`, scale: `${num(sc)} ${num(sc)}` }),
+  ];
+}
+
+/**
+ * FCPXML 1.9 from an export timeline. Spine: the a-roll with gaps; its sound
+ * stays on the spine clip unless the mic, avOffset or a J/L cut moved it, then
+ * it hangs below as its own clips. Connected above: every other video track in
+ * order (layout, b-roll, speaker corner, graphics); below: b-roll sound,
+ * voiceover, music, SFX. Markers and titles sit in the spine slot they fall in.
+ */
+export function fcpxmlFromTimeline(t: ExportTimeline): string {
+  const fps = t.fps;
+  const src = new Map(t.sources.map(s => [s.id, s]));
+  const seqF = (f: number) => frames(f, fps);
   const formats: string[] = [];
   const assets: string[] = [];
   let ids = 0;
@@ -135,155 +155,134 @@ export function toFcpxml(doc: EditDoc, media: OtioMedia): string {
     }
     return id;
   };
-  const seqFormat = format(fps, doc.canvas.width, doc.canvas.height);
+  const seqFormat = format(fps, t.canvas.width, t.canvas.height);
 
   const assetIds = new Map<string, string>();
-  const clipRate = (clip: ClipRef) => clip.fps ?? fps;
-  const assetFor = (clip: ClipRef) => {
-    let id = assetIds.get(clip.id);
+  const rateOf = (s: ExportSource) => s.fps ?? fps;
+  const assetFor = (s: ExportSource) => {
+    let id = assetIds.get(s.id);
     if (id) return id;
     id = nextId();
-    assetIds.set(clip.id, id);
-    const rate = clipRate(clip);
-    const video = clip.kind !== "audio";
-    const fmt = video ? format(clip.kind === "image" ? undefined : rate, clip.width, clip.height) : undefined;
+    assetIds.set(s.id, id);
+    const rate = rateOf(s);
+    const video = s.kind !== "audio";
+    const fmt = video ? format(s.kind === "image" ? undefined : rate, s.width, s.height) : undefined;
     assets.push(el("asset", {
-      id, name: clip.name,
-      start: str(frames(toFrame(clip.timecodeStart, rate), rate)),
-      duration: clip.kind === "image" ? "0s" : str(frames(toFrame(clip.duration, rate), rate)),
+      id, name: s.name,
+      start: str(frames(toFrame(s.timecodeStart, rate), rate)),
+      duration: s.kind === "image" ? "0s" : str(frames(toFrame(s.duration, rate), rate)),
       hasVideo: video ? "1" : undefined, format: fmt,
-      hasAudio: clip.hasAudio && clip.kind !== "image" ? "1" : undefined,
-      audioSources: clip.hasAudio && clip.kind !== "image" ? "1" : undefined,
-      audioChannels: clip.hasAudio && clip.kind !== "image" ? "2" : undefined,
-    }, [el("media-rep", { kind: "original-media", src: fileUrl(media.clipPath(clip)) })]));
+      hasAudio: s.hasAudio ? "1" : undefined, audioSources: s.hasAudio ? "1" : undefined, audioChannels: s.hasAudio ? "2" : undefined,
+    }, [el("media-rep", { kind: "original-media", src: fileUrl(s.path) })]));
     return id;
   };
-  /** Where an item reads from in its own clip's time. */
-  const sourceStart = (item: ClipItem): { clip: ClipRef; start: Rt } => {
-    const clip = clips.get(item.clipId);
-    if (!clip) throw new Error(`Unknown clip ${item.clipId}`);
-    const rate = clipRate(clip);
-    return { clip, start: frames(toFrame(clip.timecodeStart + item.in, rate), rate) };
+  /** Where a clip reads from in its source's own time. */
+  const sourceStart = (c: ExportClip) => {
+    const s = src.get(c.sourceId)!, rate = rateOf(s);
+    return { s, start: frames(toFrame(s.timecodeStart + c.in, rate), rate) };
   };
 
-  // Spine: a-roll in order, gaps between, a tail gap over anything connected past the end.
-  const aroll = live(doc.tracks["a-roll"]).filter(i => i.end > i.start).sort((a, b) => a.start - b.start);
-  const connectedEnds = [
-    ...live(doc.tracks["b-roll"]), ...live(doc.tracks.graphics), ...live(doc.tracks.voiceover),
-    ...live(doc.tracks.music), ...live(doc.tracks.sfx), ...live(doc.tracks.text),
-  ].map(i => i.end);
-  const markerTimes = doc.markers.filter(m => m.status === "applied").map(m => m.time);
-  const total = Math.max(0, ...aroll.map(i => i.end), ...connectedEnds, ...markerTimes.map(t => t + 1 / fpsValue(fps)));
+  // Spine: the top a-roll track; sound stays on it where the speech clip matches its picture.
+  const aTracks = t.video.filter(tr => tr.role === "a-roll");
+  const spineTrack = aTracks.at(-1)?.clips ?? [];
+  const speech = t.audio.find(tr => tr.role === "speech")?.clips ?? [];
+  const onSpine = new Set<string>();
   const spine: SpineSlot[] = [];
   const gap = (from: number, to: number) => {
-    if (toFrame(to, fps) <= toFrame(from, fps)) return;
-    spine.push({ offset: seq(from), startSec: from, endSec: to, localStart: { n: 0n, d: 1n }, tag: "gap",
-      attrs: { name: "Gap", start: "0s", duration: str(sub(seq(to), seq(from))) }, head: [], anchored: [], markers: [] });
+    if (to <= from) return;
+    spine.push({ offset: seqF(from), start: from, end: to, localStart: { n: 0n, d: 1n }, tag: "gap",
+      attrs: { name: "Gap", start: "0s", duration: str(seqF(to - from)) }, head: [], anchored: [], markers: [] });
   };
   let cursor = 0;
-  for (const item of aroll) {
-    if (item.start < cursor - 1e-6) throw new Error(`Overlap on A-roll at ${item.id}`);
-    gap(cursor, item.start);
-    const { clip, start } = sourceStart(item);
-    const head = [transformFor(doc, item, start), el("adjust-volume", { amount: db(item.gainDb + doc.mix.speechGainDb) })]
-      .filter((x): x is string => !!x);
-    spine.push({ offset: seq(item.start), startSec: item.start, endSec: item.end, localStart: start, tag: "asset-clip",
-      attrs: { ref: assetFor(clip), name: item.id, start: str(start), duration: str(sub(seq(item.end), seq(item.start))), tcFormat: "NDF" },
+  for (const c of spineTrack) {
+    gap(cursor, c.start);
+    const { s, start } = sourceStart(c);
+    const heard = speech.find(h => h.itemId === c.itemId && h.sourceId === c.sourceId && h.start === c.start && h.end === c.end && Math.abs(h.in - c.in) < 1e-6);
+    if (heard) onSpine.add(heard.id);
+    const p = c.picture!;
+    const head = [
+      ...(p.box ? placeXml(s, t.canvas, p) : [transformFor(p.zoom, fps, t.canvas.height, start)]),
+      heard ? el("adjust-volume", { amount: db(heard.sound!.gainDb) }) : undefined,
+    ].filter((x): x is string => !!x);
+    spine.push({ offset: seqF(c.start), start: c.start, end: c.end, localStart: start, tag: "asset-clip",
+      attrs: { ref: assetFor(s), name: c.itemId, start: str(start), duration: str(seqF(c.end - c.start)), srcEnable: heard || !s.hasAudio ? undefined : "video", tcFormat: "NDF" },
       head, anchored: [], markers: [] });
-    cursor = item.end;
+    cursor = c.end;
   }
-  gap(cursor, total);
+  gap(cursor, t.duration);
   if (!spine.length) gap(0, 1);
 
-  /** The spine slot over output time `t`; the last slot takes anything past the end. */
-  const slotAt = (t: number) => spine.find(s => toFrame(t, fps) < toFrame(s.endSec, fps)) ?? spine[spine.length - 1]!;
-  const local = (slot: SpineSlot, t: number) => add(slot.localStart, sub(seq(t), slot.offset));
-  const connect = (t: number, xml: (offset: Rt) => string) => { const s = slotAt(t); s.anchored.push(xml(local(s, t))); };
-
-  // Lanes: overlapping items on one track spread over lanes; video lanes count up, audio down.
-  let up = 1;
-  let down = -1;
-  const stack = <T extends { start: number; end: number }>(items: T[], audio: boolean, place: (item: T, lane: number) => void) => {
-    if (!items.length) return;
-    const l = lanes(items);
-    const span = Math.max(...l);
-    items.forEach((item, i) => place(item, audio ? down - l[i]! : up + (span - l[i]!)));
-    if (audio) down -= span + 1; else up += span + 1;
-  };
-  const clipXml = (item: ClipItem, lane: number, extra: { srcEnable?: string; head?: string[] }) => (offset: Rt) => {
-    const { clip, start } = sourceStart(item);
+  /** The spine slot over sequence frame `f`; the last slot takes anything past the end. */
+  const slotAt = (f: number) => spine.find(s => f < s.end) ?? spine[spine.length - 1]!;
+  const local = (slot: SpineSlot, f: number) => add(slot.localStart, sub(seqF(f), slot.offset));
+  const connect = (f: number, xml: (offset: Rt) => string) => { const s = slotAt(f); s.anchored.push(xml(local(s, f))); };
+  const clipXml = (c: ExportClip, lane: number, extra: { srcEnable?: string; head?: string[] }) => (offset: Rt) => {
+    const { s, start } = sourceStart(c);
     return el("asset-clip", {
-      ref: assetFor(clip), lane: String(lane), offset: str(offset), name: item.id,
-      start: str(start), duration: str(sub(seq(item.end), seq(item.start))), srcEnable: extra.srcEnable, tcFormat: "NDF",
+      ref: assetFor(s), lane: String(lane), offset: str(offset), name: c.itemId,
+      start: str(start), duration: str(seqF(c.end - c.start)), srcEnable: extra.srcEnable, tcFormat: "NDF",
     }, extra.head ?? []);
   };
 
-  stack(live(doc.tracks["b-roll"]), false, (b, lane) => connect(b.start, clipXml(b, lane, {
-    srcEnable: b.muted ? "video" : undefined,
-    head: [
-      el("adjust-conform", { type: b.fit === "contain" ? "fit" : "fill" }),
-      ...(b.opacity < 1 ? [el("adjust-blend", { amount: num(b.opacity) })] : []),
-    ],
-  })));
+  // Connected video: every track but the spine, bottom first, a lane each.
+  let lane = 0;
+  for (const tr of t.video) {
+    if (tr.clips === spineTrack) continue;
+    lane++;
+    for (const c of tr.clips) {
+      const s = src.get(c.sourceId)!, p = c.picture!;
+      connect(c.start, clipXml(c, lane, {
+        srcEnable: s.kind === "graphic" ? undefined : "video",
+        head: s.kind === "graphic" ? [] : [
+          ...(tr.role === "a-roll" && !p.box ? [transformFor(p.zoom, fps, t.canvas.height, sourceStart(c).start)].filter((x): x is string => !!x) : placeXml(s, t.canvas, p)),
+          ...(p.opacity < 1 ? [el("adjust-blend", { amount: num(p.opacity) })] : []),
+        ],
+      }));
+    }
+  }
 
-  const graphics = live(doc.tracks.graphics).flatMap(g => {
-    const m = media.graphicPath?.(g);
-    return m ? [{ g, m, start: g.start, end: g.end }] : [];
-  });
-  stack(graphics, false, ({ g, m }, lane) => {
-    const id = nextId();
-    assets.push(el("asset", {
-      id, name: m.path.split(/[\\/]/).pop(), start: "0s", duration: str(frames(Math.round(m.duration * fpsValue(m.fps)), m.fps)),
-      hasVideo: "1", format: format(m.fps, doc.canvas.width, doc.canvas.height),
-    }, [el("media-rep", { kind: "original-media", src: fileUrl(m.path) })]));
-    const len = Math.min(toFrame(g.end, fps) - toFrame(g.start, fps), toFrame(m.duration, fps));
-    connect(g.start, offset => el("asset-clip", {
-      ref: id, lane: String(lane), offset: str(offset), name: g.id, start: "0s", duration: str(frames(len, fps)), tcFormat: "NDF",
-    }));
-  });
-
-  const sound = (item: ClipItem & { gainDb: number }, lane: number, fades?: { fadeIn: number; fadeOut: number }) => {
-    const clip = clips.get(item.clipId);
-    const fade = fades && (fades.fadeIn > 0 || fades.fadeOut > 0)
-      ? [el("param", { name: "amount" }, [
-        ...(fades.fadeIn > 0 ? [el("fadeIn", { type: "easeIn", duration: str(seq(fades.fadeIn)) })] : []),
-        ...(fades.fadeOut > 0 ? [el("fadeOut", { type: "easeIn", duration: str(seq(fades.fadeOut)) })] : []),
-      ])]
-      : [];
-    connect(item.start, clipXml(item, lane, {
-      srcEnable: clip?.kind === "video" ? "audio" : undefined,
-      head: [el("adjust-volume", { amount: db(item.gainDb) }, fade)],
-    }));
-  };
-  stack(live(doc.tracks.voiceover), true, (v, lane) => sound(v, lane));
-  stack(live(doc.tracks.music), true, (m, lane) => sound(m, lane, m));
-  stack(live(doc.tracks.sfx), true, (s, lane) => sound(s, lane));
+  // Sound below the spine, a lane each; fades shorter than a frame are left out.
+  const oneFrame = 1 / (fps.num / fps.den);
+  lane = 0;
+  for (const tr of t.audio) {
+    const clips = tr.clips.filter(c => !onSpine.has(c.id));
+    if (!clips.length) continue;
+    lane--;
+    for (const c of clips) {
+      const a = c.sound!, s = src.get(c.sourceId)!;
+      const fi = a.fadeIn >= oneFrame ? a.fadeIn : 0, fo = a.fadeOut >= oneFrame ? a.fadeOut : 0;
+      const fade = fi || fo
+        ? [el("param", { name: "amount" }, [
+          ...(fi ? [el("fadeIn", { type: "easeIn", duration: str(seqF(toFrame(fi, fps))) })] : []),
+          ...(fo ? [el("fadeOut", { type: "easeIn", duration: str(seqF(toFrame(fo, fps))) })] : []),
+        ])]
+        : [];
+      connect(c.start, clipXml(c, lane, { srcEnable: s.kind === "video" ? "audio" : undefined, head: [el("adjust-volume", { amount: db(a.gainDb) }, fade)] }));
+    }
+  }
 
   // Markers sit inside the spine slot they fall in. FCPXML has no text layers;
-  // text items travel as markers with a note, as in the OTIO export.
-  const oneFrame = str(frames(1, fps));
-  const mark = (t: number, xml: (start: Rt) => string) => { const s = slotAt(t); s.markers.push(xml(local(s, t))); };
-  for (const m of doc.markers.filter(m => m.status === "applied")) {
-    mark(m.time, start => el(m.kind === "chapter" ? "chapter-marker" : "marker", {
-      start: str(start), duration: oneFrame, value: m.title, posterOffset: m.kind === "chapter" ? "0s" : undefined,
-    }));
-  }
-  for (const t of live(doc.tracks.text)) {
-    mark(t.start, start => el("marker", {
-      start: str(start), duration: oneFrame, value: t.text,
-      note: `${t.template}${t.subtext ? `: ${t.subtext}` : ""} (${(t.end - t.start).toFixed(2)}s)`,
-    }));
-  }
+  // titles travel as markers with a note, as in the OTIO export.
+  const oneFrameStr = str(frames(1, fps));
+  const mark = (f: number, xml: (start: Rt) => string) => { const s = slotAt(f); s.markers.push(xml(local(s, f))); };
+  for (const m of t.markers) mark(m.frame, start => el(m.kind === "chapter" ? "chapter-marker" : "marker", {
+    start: str(start), duration: oneFrameStr, value: m.name, posterOffset: m.kind === "chapter" ? "0s" : undefined,
+  }));
+  for (const m of titleMarkers(t)) mark(m.frame, start => el("marker", { start: str(start), duration: oneFrameStr, value: m.name, note: m.note }));
 
   const spineXml = spine.map(s => el(s.tag, { offset: str(s.offset), ...s.attrs }, [...s.head, ...s.anchored, ...s.markers]));
   const end = spine[spine.length - 1]!;
-  const duration = add(end.offset, sub(seq(end.endSec), seq(end.startSec)));
   const body = el("fcpxml", { version: "1.9" }, [
     el("resources", {}, [...formats, ...assets]),
-    el("library", {}, [el("event", { name: doc.name }, [el("project", { name: doc.name }, [
-      el("sequence", { format: seqFormat, duration: str(duration), tcStart: "0s", tcFormat: "NDF", audioLayout: "stereo", audioRate: "48k" },
+    el("library", {}, [el("event", { name: t.name }, [el("project", { name: t.name }, [
+      el("sequence", { format: seqFormat, duration: str(seqF(end.end)), tcStart: "0s", tcFormat: "NDF", audioLayout: "stereo", audioRate: "48k" },
         [el("spine", {}, spineXml)]),
     ])])]),
   ]);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE fcpxml>\n${body}\n`;
+}
+
+/** EditDoc → FCPXML (kept for callers; same as the "finalcut" exporter). */
+export function toFcpxml(doc: EditDoc, media: ExportMedia): string {
+  return fcpxmlFromTimeline(buildExportTimeline(doc, media));
 }
