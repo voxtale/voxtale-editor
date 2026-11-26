@@ -7,6 +7,7 @@ import {dirname, extname, join, resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {timeline, durationFrames, type Edit} from './model';
 import {run, validateMedia, probe} from './media';
+import {encodeArgs,machineEncoder} from './encoders';
 
 export async function render(edit:Edit, output:string, preview=false,progress:(message:string)=>void=()=>{}) {
   const source=await validateMedia(edit);
@@ -26,18 +27,20 @@ export async function render(edit:Edit, output:string, preview=false,progress:(m
     await writeFile(join(output,'edit.json'),JSON.stringify(edit,null,2)+'\n');
     const prepared=structuredClone(edit);
     if(preview) {prepared.width=640;prepared.height=Math.max(240,Math.round(640*edit.height/edit.width/2)*2);}
+    // The machine's encoder for the shots Remotion reads (GPU when one works, else libx264).
+    const encode=encodeArgs(await machineEncoder(),{crf:18,preset:'veryfast',width:prepared.width,height:prepared.height,fps:edit.fps});
     for(const scene of timeline(edit)) {
       if(controller.signal.aborted) throw new Error('Cancelled');
       progress(`Preparing ${scene.id}`);
       const start=scene.sourceStart/edit.fps, seconds=scene.duration/edit.fps;
       const filters=`fps=${edit.fps},scale=${prepared.width}:${prepared.height}:force_original_aspect_ratio=decrease,pad=${prepared.width}:${prepared.height}:(ow-iw)/2:(oh-ih)/2,setsar=1`;
-      await run(ffmpegPath(),['-hide_banner','-loglevel','error','-nostdin','-y','-ss',String(start),'-i',edit.source,'-t',String(seconds),'-vf',filters,'-frames:v',String(scene.duration),'-an','-c:v','libx264','-preset','veryfast','-crf','18','-pix_fmt','yuv420p',join(publicDir,`shot-${scene.id}.mp4`)],controller.signal);
+      await run(ffmpegPath(),['-hide_banner','-loglevel','error','-nostdin','-y','-ss',String(start),'-i',edit.source,'-t',String(seconds),'-vf',filters,'-frames:v',String(scene.duration),'-an',...encode,join(publicDir,`shot-${scene.id}.mp4`)],controller.signal);
       const audioInput=source.audio?['-ss',String(start),'-i',edit.source]:['-f','lavfi','-i','anullsrc=r=48000:cl=stereo'];
       await run(ffmpegPath(),['-hide_banner','-loglevel','error','-nostdin','-y',...audioInput,'-t',String(seconds),'-vn','-af','apad','-ar','48000','-ac','2',join(publicDir,`audio-${scene.id}.wav`)],controller.signal);
       const dest=prepared.scenes.find(s=>s.id===scene.id)!;
       if(scene.broll && dest.broll) {
         const name=`broll-${scene.id}${scene.broll.kind==='video'?'.mp4':extname(scene.broll.path)}`;
-        if(scene.broll.kind==='video') await run(ffmpegPath(),['-hide_banner','-loglevel','error','-nostdin','-y','-ss',String(scene.broll.in),'-i',scene.broll.path,'-t',String(seconds),'-vf',`fps=${edit.fps}`,'-an','-c:v','libx264','-pix_fmt','yuv420p',join(publicDir,name)],controller.signal);
+        if(scene.broll.kind==='video') await run(ffmpegPath(),['-hide_banner','-loglevel','error','-nostdin','-y','-ss',String(scene.broll.in),'-i',scene.broll.path,'-t',String(seconds),'-vf',`fps=${edit.fps}`,'-an',...encode,join(publicDir,name)],controller.signal);
         else await copyFile(scene.broll.path,join(publicDir,name));
         dest.broll.path=name;dest.broll.in=0;
       }

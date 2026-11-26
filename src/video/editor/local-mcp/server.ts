@@ -17,6 +17,8 @@ import {homedir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {editDocJsonSchema,EXPORT_TARGETS,exportTimeline,STYLE_PRESETS,toSrt,type ExportTarget} from '@voxtale/editdoc';
 import {EXPORT_TIMELINE_DESCRIPTION} from './export-guide';
+import {DOWNLOAD_DESCRIPTION} from './download-text';
+import {download} from '../../download';
 import {nativeFaceFinder} from '../../../native/bridge';
 import {checkNatives,missingNote,type NativeCheck} from '../../../native/check';
 import {uvFaceFinder} from '../../../native/uv-faces';
@@ -181,7 +183,22 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
         }});
         const x=r.actual,canvas=ws.doc!.canvas;
         const shaped=(width||height)&&(x.width!==canvas.width||x.height!==canvas.height)?` (cut composed at ${canvas.width}x${canvas.height}, ${fit==='cover'?'cropped to fill':'scaled whole with black bars'})`:'';
-        return {text:`${r.file} (${r.seconds.toFixed(0)}s to render)\nfile: ${x.width}x${x.height}, ${+x.fps.toFixed(3)} fps, ${x.duration.toFixed(2)}s${shaped}${r.skipped.length?`\nleft out: ${r.skipped.join(', ')}`:''}${r.unmasked.length?`\nover the speaker, not behind: ${r.unmasked.join('; ')}`:''}${r.loudness.length?`\nloudness:\n- ${r.loudness.join('\n- ')}`:''}${r.graded.length?`\ngraded: ${r.graded.join(', ')}`:''}`};
+        return {text:`${r.file} (${r.seconds.toFixed(0)}s to render${r.encoder?`, ${r.encoder}`:''}${r.copiedFrames?`, ${Math.round(100*r.copiedFrames/Math.max(1,r.frames))}% copied from the footage`:''})\nfile: ${x.width}x${x.height}, ${+x.fps.toFixed(3)} fps, ${x.duration.toFixed(2)}s${shaped}${r.skipped.length?`\nleft out: ${r.skipped.join(', ')}`:''}${r.unmasked.length?`\nover the speaker, not behind: ${r.unmasked.join('; ')}`:''}${r.loudness.length?`\nloudness:\n- ${r.loudness.join('\n- ')}`:''}${r.graded.length?`\ngraded: ${r.graded.join(', ')}`:''}`};
+      }},
+
+    {name:'download',description:DOWNLOAD_DESCRIPTION,
+      input:{url:z.string().describe('https link the creator gave'),
+        start:z.string().optional().describe('clip start, seconds or m:ss (video pages only)'),
+        end:z.string().optional().describe('clip end, seconds or m:ss (video pages only)'),
+        name:z.string().optional().describe('file name to save as (no folder)'),
+        thumbnail:z.boolean().optional().describe('also save the video page thumbnail'),
+        folder:folderArg},
+      run:async({url,start,end,name,thumbnail,folder})=>{
+        const dir=folder?folderOf(folder):at?.folder??folderOf();
+        try {
+          const r=await download({url,folder:dir,...(start?{start}:{}),...(end?{end}:{}),...(name?{name}:{}),...(thumbnail?{thumbnail}:{})});
+          return {text:`${r.kind==='clip'?`clip of "${r.title}"`:'file'} saved:\n${r.files.join('\n')}\nOpen it with the footage to use it in the edit.`};
+        } catch(e) {return {text:e instanceof Error?e.message:String(e),isError:true};}
       }},
 
     {name:'sheet',description:'16 frames of a rendered video in one picture, to check what the viewer sees: black frames, captions over faces, footage that misses the words.',

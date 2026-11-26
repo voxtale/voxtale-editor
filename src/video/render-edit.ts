@@ -14,6 +14,8 @@ import {
   SETTLE_BACK,splitBoxes,companionSources,speechSounds,clipLut,parseCube,pictureSource,writeCube,LUT_SIZE,type Easing,type EditDoc,type LoudnessLevel,type ZoomKey,type ZoomProperty,
 } from '@voxtale/editdoc';
 import {run} from './media';
+import {encodeArgs,machineEncoder,muxTag,SOFTWARE,type VideoEncoder} from './encoders';
+import {assBusy,copyArgs,copyCandidates,copyRange,copyableSource,mixedChunks,packetProbeArgs,parsePackets,parseSourceProbe,sourceProbeArgs,type CopyPart} from './fast-copy';
 import {writeLibrary} from './sfx';
 
 export const SAMPLE_RATE=48000;
@@ -55,6 +57,14 @@ export interface RenderEditOptions {
   signal?:AbortSignal;
   /** Delivery size and rate, when they differ from the doc's canvas and fps (see outputFilter). */
   output?:OutputShape;
+  /** Video encoder; default the machine's (encoders.ts: GPU when one works, else libx264). */
+  encoder?:VideoEncoder;
+  /**
+   * Stream-copy passages of one untouched source instead of encoding them
+   * (fast-copy.ts). Default on; off when the output is reshaped. The joined
+   * file is checked frame by frame count, and rendered again without copies if short.
+   */
+  fast?:boolean;
 }
 
 /**
@@ -88,6 +98,9 @@ export interface RenderEditResult {
   graded?:string[];
   /** Items drawn or heard other than asked: a graphic still rendering, its subject mask missing, an angle/mic/companion that does not cover the piece (master used). */
   skipped:{itemId:string;reason:'graphic-not-ready'|'subject-mask-missing'|'angle-out-of-range'|'mic-out-of-range'|'companion-out-of-range'}[];
+  /** The encoder used, and output frames stream-copied from sources instead of encoded. */
+  encoder?:string;
+  copiedFrames?:number;
 }
 export type SubjectMasker=(o:{video:string;start:number;end:number;fps:number;out:string})=>Promise<boolean>;
 
@@ -97,7 +110,7 @@ export class MissingMediaError extends Error {
 
 // ---- timeline model ---------------------------------------------------------------
 
-interface Picture {
+export interface Picture {
   itemId:string;
   path:string;
   kind:'video'|'image'|'graphic';
@@ -613,7 +626,7 @@ function pictureFilter(p:Picture,skip:number,frames:number,plan:RenderPlan):stri
 export const filterPath=(p:string,win=process.platform==='win32')=>(win?p.replace(/\\/g,'/'):p).replace(/:/g,'\\:').replace(/'/g,`'\\\\\\''`);
 
 /** Picture of frames [c0, c1): black, then each item over it, then text and captions. */
-function videoChunkArgs(plan:RenderPlan,c0:number,c1:number,assFile:string,fontsDir:string|undefined,out:string,o:{preset:string;crf:number}):{args:string[];graph:string} {
+function videoChunkArgs(plan:RenderPlan,c0:number,c1:number,assFile:string,fontsDir:string|undefined,out:string,o:{encode:string[];ts:boolean}):{args:string[];graph:string} {
   const {width:W,height:H,rate,fps}=plan;
   const inputs:string[]=['-f','lavfi','-i',`color=c=black:s=${W}x${H}:r=${rate}`];
   const graph:string[]=[];
@@ -653,8 +666,8 @@ function videoChunkArgs(plan:RenderPlan,c0:number,c1:number,assFile:string,fonts
   graph.push(`[${last}]${text}format=yuv420p[vout]`);
   return {graph:graph.join(';\n'),args:[
     ...inputs,'-map','[vout]','-frames:v',String(c1-c0),'-an',
-    '-c:v','libx264','-preset',o.preset,'-crf',String(o.crf),'-pix_fmt','yuv420p','-r',rate,
-    '-video_track_timescale',String(plan.timescale),'-y',out,
+    ...o.encode,'-r',rate,
+    ...(o.ts?['-f','mpegts']:['-video_track_timescale',String(plan.timescale)]),'-y',out,
   ]};
 }
 
@@ -769,9 +782,47 @@ async function writeSubjectMasks(o:RenderEditOptions,media:Record<string,string>
   return out;
 }
 
+/**
+ * Copy parts for the plan: candidates (one plain picture, nothing over it)
+ * whose source is copyable, each cut to clean keyframe bounds. Probe errors
+ * mean no copy, never a failed render.
+ */
+async function planCopies(plan:RenderPlan,ffprobe:string,enc:VideoEncoder,signal?:AbortSignal):Promise<CopyPart[]> {
+  const holds=plan.holds.map(([a,b])=>[a,b] as [number,number]);
+  const cands=copyCandidates(plan,[...assBusy(plan.ass,plan.fps),...holds]);
+  const sources=new Map<string,ReturnType<typeof parseSourceProbe>>();
+  const out:CopyPart[]=[];
+  for(const c of cands) {
+    if(!sources.has(c.path))sources.set(c.path,await run(ffprobe,sourceProbeArgs(c.path),signal).then(parseSourceProbe,()=>null));
+    const src=sources.get(c.path);
+    if(!src||!copyableSource(src,plan,enc.codec))continue;
+    const end=c.src+(c.f1-c.f0)/plan.fps;
+    const packets=await run(ffprobe,packetProbeArgs(c.path,src.startTime+c.src,src.startTime+end+2),signal).then(t=>parsePackets(t,src.startTime),()=>[]);
+    const r=copyRange(packets,c,plan.fps);
+    if(r)out.push({path:c.path,...r});
+  }
+  return out;
+}
+
+async function countFrames(ffprobe:string,file:string,signal?:AbortSignal):Promise<number> {
+  const t=await run(ffprobe,['-v','error','-select_streams','v:0','-count_packets','-show_entries','stream=nb_read_packets','-of','csv=p=0',file],signal).catch(()=>'');
+  return Number.parseInt(t.trim(),10)||0;
+}
+
 export async function renderEditDoc(o:RenderEditOptions):Promise<RenderEditResult> {
   // ffmpeg-path.ts finds a libass build (env var, then ffmpeg-full on Mac).
   const ffmpeg=o.ffmpeg??ffmpegPath(),ffprobe=o.ffprobe??ffprobePath();
+  const enc=o.encoder??await machineEncoder({ffmpeg});
+  try {
+    return await renderWith(o,ffmpeg,ffprobe,enc);
+  } catch(e) {
+    // A GPU encoder that passed the test encode can still fail on a real one (busy, out of sessions, odd size): the CPU instead.
+    if(!enc.hardware||o.signal?.aborted||e instanceof MissingMediaError||/Nothing on the timeline/.test(String(e)))throw e;
+    return renderWith(o,ffmpeg,ffprobe,{codec:enc.codec,name:SOFTWARE[enc.codec],hardware:false});
+  }
+}
+
+async function renderWith(o:RenderEditOptions,ffmpeg:string,ffprobe:string,enc:VideoEncoder):Promise<RenderEditResult> {
   const ff=(args:string[])=>run(ffmpeg,['-hide_banner','-nostdin','-loglevel','error',...args],o.signal);
   const soft=o.captions==='track'&&shown(o.doc.tracks.captions).length>0;
   await rm(o.work,{recursive:true,force:true});
@@ -787,15 +838,32 @@ export async function renderEditDoc(o:RenderEditOptions):Promise<RenderEditResul
     await writeFile(assFile,plan.ass);
     const channels=await channelCounts(ffprobe,plan.sounds.map(s=>s.path),o.signal);
     const per=Math.max(1,Math.round((o.chunkSeconds??30)*plan.fps));
-    const chunks=chunkBounds(plan.frames,per,plan.holds);
+    const reshape=outputFilter(o.doc.canvas,plan.fps,o.output);
+    const quality={crf:o.crf??18,preset:o.preset??'veryfast',width:plan.width,height:plan.height,fps:plan.fps};
+    const encode=encodeArgs(enc,quality);
+    // Copies only pay when the joined picture is not encoded again at the end.
+    const copies=o.fast!==false&&!reshape?await planCopies(plan,ffprobe,enc,o.signal):[];
+    const ts=copies.length>0;
+    const chunks=mixedChunks(plan.frames,per,plan.holds,copies,chunkBounds);
     const sample=(frame:number)=>Math.round(frame/plan.fps*SAMPLE_RATE);
-    let done=0;
-    o.progress?.(0);
-    await pool(chunks,o.concurrency??2,async({k,c0,c1})=>{
-      const v=videoChunkArgs(plan,c0,c1,assFile,o.fontsDir,join(o.work,`v${k}.mp4`),{preset:o.preset??'veryfast',crf:o.crf??18});
+    const ext=ts?'ts':'mp4';
+    // A chunk's picture: copied from its source, else encoded; a copy short of frames is encoded instead.
+    const picture=async(k:number|string,c0:number,c1:number,copy?:CopyPart):Promise<number>=>{
+      const file=join(o.work,`v${k}.${ext}`);
+      if(copy) {
+        const ok=await ff(copyArgs(copy,plan.fps,file)).then(()=>countFrames(ffprobe,file,o.signal),()=>0);
+        if(ok===copy.frames)return copy.frames;
+      }
+      const v=videoChunkArgs(plan,c0,c1,assFile,o.fontsDir,file,{encode,ts});
       const vg=join(o.work,`v${k}.graph`);
       await writeFile(vg,v.graph);
       await ff(['-filter_complex_script',vg,...v.args]);
+      return 0;
+    };
+    let done=0,copied=0;
+    o.progress?.(0);
+    await pool(chunks,o.concurrency??2,async({k,c0,c1,copy})=>{
+      copied+=await picture(k,c0,c1,copy);
       const a=audioChunkArgs(plan,sample(c0),sample(c1),channels,join(o.work,`a${k}.wav`));
       const ag=join(o.work,`a${k}.graph`);
       await writeFile(ag,a.graph);
@@ -803,7 +871,8 @@ export async function renderEditDoc(o:RenderEditOptions):Promise<RenderEditResul
       o.progress?.(++done/(chunks.length+1));
     },o.signal);
     const vlist=join(o.work,'video.txt'),alist=join(o.work,'audio.txt'),mixWav=join(o.work,'mix.wav');
-    await writeFile(vlist,chunks.map(c=>quoteList(join(o.work,`v${c.k}.mp4`))).join('\n'));
+    // MPEG-TS parts carry no MP4 durations: each gets its exact length, so joins land on the frame.
+    await writeFile(vlist,chunks.map(c=>quoteList(join(o.work,`v${c.k}.${ext}`))+(ts?`\nduration ${num((c.c1-c.c0)/plan.fps)}`:'')).join('\n'));
     await writeFile(alist,chunks.map(c=>quoteList(join(o.work,`a${c.k}.wav`))).join('\n'));
     await ff(['-f','concat','-safe','0','-i',alist,'-c','copy','-rf64','auto','-y',mixWav]);
     // Loudness: one gain step and a limiter, as the desktop export applies.
@@ -812,21 +881,23 @@ export async function renderEditDoc(o:RenderEditOptions):Promise<RenderEditResul
     const gainDb=before?loudnessGain(before,target):0;
     const af=gainDb?['-af',`volume=${gainDb}dB,alimiter=limit=${limiterCeiling(target.truePeakDb).toFixed(4)}:level=0`]:[];
     const srt=join(o.work,'captions.srt');
-    const reshape=outputFilter(o.doc.canvas,plan.fps,o.output);
     if(soft)await writeFile(srt,toSrt(o.doc));
     await ff([
       '-f','concat','-safe','0','-i',vlist,'-i',mixWav,...(soft?['-i',srt]:[]),'-map','0:v','-map','1:a',...(soft?['-map','2:s']:[]),
-      ...(reshape?['-vf',reshape,'-c:v','libx264','-preset',o.preset??'veryfast','-crf',String(o.crf??18),'-pix_fmt','yuv420p']:['-c:v','copy']),
+      ...(reshape?['-vf',reshape,...encodeArgs(enc,{...quality,...(o.output?.width?{width:o.output.width}:{}),...(o.output?.height?{height:o.output.height}:{}),...(o.output?.fps?{fps:o.output.fps}:{})})]:['-c:v','copy']),
+      ...muxTag(enc.codec),...(ts?['-video_track_timescale',String(plan.timescale)]:[]),
       ...af,'-c:a','aac','-b:a','192k','-ar',String(SAMPLE_RATE),
       ...(soft?['-c:s','mov_text','-metadata:s:s:0','language=eng','-disposition:s:0','default']:[]),'-movflags','+faststart','-y',o.out,
     ]);
+    // A join that lost or doubled frames: the whole picture encoded instead.
+    if(ts&&await countFrames(ffprobe,o.out,o.signal)!==plan.frames)return renderWith({...o,fast:false},ffmpeg,ffprobe,enc);
     // The delivered file, measured: what the viewer's player will meet.
     const after=before?parseLoudness(await run(ffmpeg,['-hide_banner','-nostdin','-i',o.out,'-vn','-af','ebur128=peak=true:framelog=quiet','-f','null','-'],o.signal)):undefined;
     o.progress?.(1);
     return {
       out:o.out,frames:plan.frames,duration:plan.frames/plan.fps,
       ...(before?{loudness:{before,gainDb,...(after?{after}:{})}}:{}),skipped:plan.skipped,
-      ...(Object.keys(luts).length?{graded:Object.keys(luts)}:{}),
+      ...(Object.keys(luts).length?{graded:Object.keys(luts)}:{}),encoder:enc.name,...(copied?{copiedFrames:copied}:{}),
     };
   } finally {
     await rm(o.work,{recursive:true,force:true});
