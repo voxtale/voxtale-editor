@@ -34,6 +34,8 @@ import {EDITDOC_GUIDE,editingGuide,SERVER_INSTRUCTIONS} from './guide';
 import {styleTools} from './style-tools';
 import {labelTools} from './label-tools';
 import {visionMode} from './vision-mode';
+import {newVersion,readVersions,restoreVersion,trashScratch,trashVersions,versionsText,type Trash} from './versions';
+import {NEW_VERSION_DESCRIPTION,RESTORE_VERSION_DESCRIPTION,TRASH_DESCRIPTION,VERSIONS_DESCRIPTION} from '../agent/versions-timeline-skill-text';
 import {stylesRoot} from '../styles/folder';
 import {migrateGlobalRules} from '../styles/style-rules';
 import {isPreset,useStyle} from '../styles/use';
@@ -57,6 +59,8 @@ export interface LocalEditorOptions {
   /** Labels footage at open; default from VOXTALE_EDITOR_VISION (vision-mode.ts): the OpenRouter vision model, or null = harness (the agent labels). */
   vision?:VisionModel|null;
   version?:string;
+  /** Sends dropped versions and scratch stills to the system Trash; default the Finder's / Recycle Bin (tests pass their own). */
+  trash?:Trash;
   /** What this machine has of the face finder, subject mask and pixel font; default checked on first need (checkNatives). */
   natives?:Promise<NativeCheck>;
 }
@@ -150,6 +154,8 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
         const log=(l:string)=>{lines.push(l);console.error(l);ctx.progress(lines.length,undefined,l.trim());};
         const of=(files as {path:string;role:string}[]).map(f=>{const [role,voice,synced]=ROLES[f.role]!;return {path:f.path,role,voice,synced} satisfies OpenFile;});
         const styled=style&&!isPreset(style)?await useStyle(await root(),style,usage):undefined;
+        // Opening again starts over: the edit there stays as a version.
+        if(hasProject(a)){const v=await newVersion(a.dir,'open started over');log(`the edit before this open is kept as v${v.current-1} (versions, restore_version)`);}
         await openProject(a,{files:of,...(format?{format}:{}),...(style&&!styled?{style}:{}),...(styled?{styled}:{}),...(target?{target}:{}),...(note?{instruction:note}:{}),proxies:proxies!==false,vision},log);
         await load(a);
         return {text:`${lines.join('\n')}\n\nOpen: ${a.folder}\nclips:\n${clipLines(open!.ws)}${await missing()}\n\n${brief(open!.ws)}`};
@@ -233,6 +239,38 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
         return {text:[`${r.app}, ${r.format}`,file,srt,
           ...(lost.length?['not carried:',...lost]:['everything in the edit carried']),
           ...(missing.length?[`missing on disk (the editor will ask for them): ${missing.join(', ')}`]:[])].join('\n')};
+      }},
+    {name:'new_version',description:NEW_VERSION_DESCRIPTION,
+      input:{note:z.string().trim().max(120).optional().describe('what this version is for')},
+      run:async({note})=>{
+        const {a,p,ws}=current();
+        await keepProject(a,p,ws);
+        const i=await newVersion(a.dir,note);
+        return {text:`v${i.current-1} kept as it was. Now on v${i.current}: change it directly.`};
+      }},
+    {name:'versions',description:VERSIONS_DESCRIPTION,
+      input:{},
+      run:async()=>({text:versionsText(await readVersions(current().a.dir))})},
+    {name:'restore_version',description:RESTORE_VERSION_DESCRIPTION,
+      input:{version:z.number().int().positive().describe('version number from versions'),note:z.string().trim().max(120).optional()},
+      run:async({version,note})=>{
+        const {a,p,ws}=current();
+        await keepProject(a,p,ws);
+        const i=await restoreVersion(a.dir,version,note);
+        await load(a);
+        const doc=open!.ws.doc;
+        return {text:`v${i.current-1} kept. Now on v${i.current}, a copy of v${version}: ${doc?`cut ${Math.max(0,...doc.tracks['a-roll'].map(x=>x.end)).toFixed(1)}s, ${open!.ws.segments.length} segments`:'no cut'}.`};
+      }},
+    {name:'trash',description:TRASH_DESCRIPTION,
+      input:{versions:z.array(z.number().int().positive()).max(200).optional().describe('frozen version numbers'),
+        scratch:z.boolean().optional().describe('the preview stills in .edit/preview and .edit/views')},
+      run:async({versions,scratch})=>{
+        const {a}=current();
+        if(!versions?.length&&!scratch)return {text:'Name versions, or scratch: true.',isError:true};
+        const done:string[]=[];
+        if(versions?.length)done.push(...(await trashVersions(a.dir,versions,o.trash)).trashed.map(n=>`v${n}`));
+        if(scratch)done.push(...await trashScratch(a.dir,'all',o.trash));
+        return {text:done.length?`In the Trash (recoverable): ${done.join(', ')}`:'Nothing to trash.'};
       }},
     ...styleTools({root,current:()=>open&&at?{ws:open.ws,keep:()=>keepProject(at!,open!.p,open!.ws)}:undefined}),
     ...(harness?labelTools({current:()=>open&&at?{dir:at.dir,ws:open.ws,keep:()=>keepProject(at!,open!.p,open!.ws)}:undefined,

@@ -36,6 +36,9 @@ import {mediaTools} from './media-tools';
 import {logoTools} from './logo-tools';
 import type {LogoPlacement} from './logo';
 import type {Multicam} from './multicam';
+import {findWordsText,timelineText} from './timeline-text';
+import {FIND_WORDS_DESCRIPTION,TIMELINE_DESCRIPTION} from './versions-timeline-skill-text';
+import {TRACK_KINDS,type TrackKind} from '@voxtale/editdoc';
 
 export interface Workspace {
   dir:string;
@@ -404,6 +407,21 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
         const words=c.words.filter(w=>w.end>start&&w.start<end).map(w=>`${w.id}:${w.text}@${w.start.toFixed(2)}`).join(' ');
         const at=stripTimes(start,to).map(t=>t.toFixed(2));
         return {text:`frames at ${at.join(', ')}s (first = the frame at ${at[0]}s, last = the final frame before ${at.at(-1)}s)\nwords: ${words}`,images:png(img)};
+      }}),
+
+    defineTool({name:'timeline',description:TIMELINE_DESCRIPTION,
+      input:{at:z.number().min(0).optional().describe('output second: only what sits under it'),
+        tracks:z.array(z.enum(TRACK_KINDS as unknown as [TrackKind,...TrackKind[]])).min(1).optional().describe('only these tracks')},
+      run:async({at,tracks})=>{
+        if(!ws.doc)throw new Error('no cut yet: set_cut first');
+        return {text:timelineText(ws.doc,ws.job,{...(at!==undefined?{at}:{}),...(tracks?{tracks}:{})})};
+      }}),
+
+    defineTool({name:'find_words',description:FIND_WORDS_DESCRIPTION,
+      input:{phrases:z.array(z.string().trim().min(1).max(200)).min(1).max(20).describe('words or phrases, as said')},
+      run:async({phrases})=>{
+        if(!ws.doc)throw new Error('no cut yet: set_cut first');
+        return {text:findWordsText(ws.doc,ws.job,phrases)};
       }}),
 
     defineTool({name:'set_cut',description:'Replace the whole cut with these segments, in play order. A spoken segment keeps words from..to of a speaking clip; code pads to word edges. pace and hold set the rhythm: how tight a stretch runs and where a line gets a beat. A shot segment (in/out instead of from/to) places a video clip, or source seconds of it, as its own stretch of the cut, speech or not: a silent shot, music-only or ambient footage, between or among spoken segments, with its own sound kept or muted. Footage over the voice is show_footage instead. Returns metrics, problems the checks found, every join as text with the gap a viewer hears, tight joins (no silence at the cut) and cut words still heard, what the source says in the 10s after the cut ends, and joins where the speaker visibly jumps.',
