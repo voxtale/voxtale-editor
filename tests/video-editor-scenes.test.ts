@@ -8,6 +8,7 @@ import {propsText} from '../src/video/editor/agent/scene-tools';
 import {BUILTIN_NAMES,BUILTIN_SCENES} from '../src/video/editor/agent/sandbox/remotion/scenes/schemas';
 import {designSize,fontFace} from '../src/video/editor/agent/sandbox/remotion/scenes/root';
 import {localHtmlRenderer} from '../src/video/editor/agent/hyperframes';
+import {PAPERCRAFT_SKILL_TEXT,PIXEL_SKILL_TEXT,SCENES_SKILL_TEXT} from '../src/video/editor/agent/scene-skill';
 
 const good=`import {AbsoluteFill, z} from './kit';
 import type {SceneBase} from './types';
@@ -59,4 +60,12 @@ describe('native scenes',()=>{
     const hf=await localHtmlRenderer({home:join(dir,'hf-home')})({dir:inDir,width:1920,height:1080,seconds:2});
     expect(hf.report).toContain('need the Remotion renderer');
   });
+
+  test('the skill-text examples (plain, papercraft, pixel) pass the scene gate',()=>{
+    for(const text of [SCENES_SKILL_TEXT,PAPERCRAFT_SKILL_TEXT,PIXEL_SKILL_TEXT]) {
+      const src=/```tsx\n([\s\S]*?)```/.exec(text)?.[1];
+      expect(src).toBeDefined();
+      expect(checkScene(src!)).toMatchObject({ok:true,errors:[]});
+    }
+  },30_000);
 });
