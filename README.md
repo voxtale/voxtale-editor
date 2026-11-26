@@ -52,7 +52,9 @@ tools/fetch-subject-model.sh                                         # optional 
 
 | Variable | Use |
 |---|---|
-| `OPENROUTER_API_KEY` | Model calls (planning, moments, graphics); paid |
+| `OPENROUTER_API_KEY` | Optional, recommended: footage labels at `open` (Gemini, best on video), CLI planning stages, cloud jobs; paid |
+| `VOXTALE_EDITOR_VISION` | Who labels footage: `openrouter` (default with a key) or `harness` (default without: the agent labels via `label_footage` / `save_labels`, no server model call) |
+| `VIDEO_INDEX_MODEL` | OpenRouter vision model for labels; default `google/gemini-3.8-flash` |
 | `ASSEMBLYAI_API_KEY`, `ASSEMBLYAI_REGION` | Transcription; paid |
 | `VOXTALE_EDITOR_FFMPEG`, `VOXTALE_EDITOR_FFPROBE` | ffmpeg paths (old `SUPERTALE_*` names still work) |
 | `VOXTALE_EDITOR_PYTHON`, `VOXTALE_EDITOR_UV` | Face finder interpreter / uv binary |

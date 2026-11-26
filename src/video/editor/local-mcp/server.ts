@@ -4,9 +4,10 @@
 // (apps/editor-mcp) only wires it up.
 //
 // Beyond the editor tools: open/resume a project, render, sheet, clips (file
-// paths), export_timeline (Premiere/Resolve xmeml, FCPXML, OTIO + SRT), editing_guide. With
-// OPENROUTER_API_KEY, open also labels the footage (find_footage,
-// screen_activity), as the cloud planner does. Resources: the
+// paths), export_timeline (Premiere/Resolve xmeml, FCPXML, OTIO + SRT), editing_guide. Footage
+// labels (find_footage, screen_activity) follow VOXTALE_EDITOR_VISION
+// (vision-mode.ts): openrouter, open labels with a Gemini model as the cloud
+// planner does; harness, label_footage/save_labels hand it to the agent. Resources: the
 // EditDoc schema, a guide to reading it, and the current edit. Prompt:
 // edit-video.
 import {existsSync} from 'node:fs';
@@ -27,6 +28,8 @@ import {jobTools,newWorkspace} from '../agent/session';
 import type {Workspace} from '../agent/tools';
 import {EDITDOC_GUIDE,editingGuide,SERVER_INSTRUCTIONS} from './guide';
 import {styleTools} from './style-tools';
+import {labelTools} from './label-tools';
+import {visionMode} from './vision-mode';
 import {stylesRoot} from '../styles/folder';
 import {migrateGlobalRules} from '../styles/style-rules';
 import {isPreset,useStyle} from '../styles/use';
@@ -47,7 +50,7 @@ export interface LocalEditorOptions {
   rulesFile?:string;
   /** Style folders (rules.md, style.json, brand/, references/); default VOXTALE_STYLES, else ~/.voxtale-editor/styles. */
   stylesDir?:string;
-  /** Labels footage at open; default the OpenRouter vision model when OPENROUTER_API_KEY is set, null = off. */
+  /** Labels footage at open; default from VOXTALE_EDITOR_VISION (vision-mode.ts): the OpenRouter vision model, or null = harness (the agent labels). */
   vision?:VisionModel|null;
   version?:string;
 }
@@ -70,7 +73,10 @@ export interface LocalEditorServer extends McpServer {
 /** The server, for any transport. `notify` reaches the client (tools/list_changed after open). */
 export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalEditorServer {
   const graphics=o.graphics??process.env.VOXTALE_GRAPHICS!=='off';
-  const vision=o.vision!==undefined?o.vision:process.env.OPENROUTER_API_KEY?(system:string,parts:Parameters<VisionModel>[1])=>askVision(system,parts):null;
+  const mode=o.vision!==undefined?{mode:o.vision?'openrouter' as const:'harness' as const}:visionMode();
+  if('warning' in mode&&mode.warning)console.error(mode.warning);
+  const vision=o.vision!==undefined?o.vision:mode.mode==='openrouter'?(system:string,parts:Parameters<VisionModel>[1])=>askVision(system,parts):null;
+  const harness=mode.mode==='harness';
   const folderOf=(f?:string)=>resolve(f??o.folder??process.env.EDIT_FOLDER??process.cwd());
   let ports:Promise<Ports>|undefined;
   const portsOf=()=>(ports??=uvFaceFinder().then(faces=>({...(faces?{faces}:{}),
@@ -118,7 +124,7 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
     {name:'editing_guide',description:'How to edit well with these tools: workflow, cutting, rhythm, zoom, captions, footage. Read it before the first edit.',
       input:{},run:async()=>({text:guide()})},
 
-    {name:'open',description:'Start an edit from footage files: reads each file, transcribes speech (about 1 min per 10 min of speech), labels b-roll and screen clips with a vision model when the server has one (for find_footage; a few cents per minute of footage, kept for the next open) and opens the project in <folder>/.edit/. Starts over if an edit is already there (use resume to continue it). Roles: talk (the speaker on camera), voiceover (sound only; the picture is your footage), broll, screen, screen_synced (a screen recorded together with the speaker), music, sfx. The clips in the cut set the picture\'s shape: a speaker in it, else the shape with the most screen time. A talk clip with no spoken words opens as broll, with a warning. Lists the clips when done. '+OPEN_MEDIA_NOTE,
+    {name:'open',description:'Start an edit from footage files: reads each file, transcribes speech (about 1 min per 10 min of speech), labels b-roll and screen clips with a vision model when the server has one (for find_footage; a few cents per minute of footage, kept for the next open; else label_footage hands them to you) and opens the project in <folder>/.edit/. Starts over if an edit is already there (use resume to continue it). Roles: talk (the speaker on camera), voiceover (sound only; the picture is your footage), broll, screen, screen_synced (a screen recorded together with the speaker), music, sfx. The clips in the cut set the picture\'s shape: a speaker in it, else the shape with the most screen time. A talk clip with no spoken words opens as broll, with a warning. Lists the clips when done. '+OPEN_MEDIA_NOTE,
       input:{folder:folderArg,
         files:z.array(z.object({path:z.string().describe('absolute, or relative to folder'),role:z.enum(Object.keys(ROLES) as [string,...string[]])})).min(1),
         format:z.enum(['vertical','horizontal']).optional().describe('voiceover only: the picture\'s shape; default the first footage\'s'),
@@ -217,6 +223,8 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
           ...(missing.length?[`missing on disk (the editor will ask for them): ${missing.join(', ')}`]:[])].join('\n')};
       }},
     ...styleTools({root,current:()=>open&&at?{ws:open.ws,keep:()=>keepProject(at!,open!.p,open!.ws)}:undefined}),
+    ...(harness?labelTools({current:()=>open&&at?{dir:at.dir,ws:open.ws,keep:()=>keepProject(at!,open!.p,open!.ws)}:undefined,
+      changed:()=>notify()('notifications/tools/list_changed',{})}):[]),
   ];
   const serverNames=new Set(SERVER.map(t=>t.name));
 

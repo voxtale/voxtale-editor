@@ -17,7 +17,8 @@ bun test tests          # no network, no paid API
 ```
 
 `OPENROUTER_API_KEY` / `ASSEMBLYAI_API_KEY` in `.env` arm paid calls; bun
-auto-loads `.env`. Renders and bench runs cost time and money: run them only
+auto-loads `.env`. A key also makes the local MCP label footage with Gemini at
+open; `VOXTALE_EDITOR_VISION=harness` hands labelling to the agent instead. Renders and bench runs cost time and money: run them only
 when asked.
 
 ## Rules

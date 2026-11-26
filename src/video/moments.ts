@@ -2,8 +2,10 @@
 // footage index (footage-index.ts) labels shots of up to 20s, which is too
 // coarse to know when a screen recording turns to the bell curve. Here code
 // finds every visible change in one cheap pass and owns the times; a provider
-// only describes the moments it is given. Providers are swappable so they can
-// be scored on the same truth (tools/moments-eval.ts).
+// only describes the moments it is given. On the local MCP the provider is the
+// agent driving it (provider 'agent': label_footage / save_labels); the cloud
+// job injects a vision model ('dense'). Saved runs score against the same
+// truth (tools/moments-eval.ts).
 import {z} from 'zod';
 import type {FrameHost} from '@voxtale/frames';
 import {promptStamp,promptText} from '../services/prompts';
@@ -11,7 +13,7 @@ import type {VisionModel,VisionPart} from './footage-index';
 import {MOMENTS_PROMPT_ID} from './prompts';
 
 const time=z.number().finite().nonnegative();
-export const MOMENT_PROVIDERS=['dense','gemini-video','jev'] as const;
+export const MOMENT_PROVIDERS=['dense','gemini-video','jev','agent'] as const;
 export type MomentProvider=typeof MOMENT_PROVIDERS[number];
 
 export const momentSchema=z.object({
@@ -128,6 +130,16 @@ async function pool<T>(items:T[],n:number,fn:(x:T)=>Promise<void>):Promise<void>
   await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{while(next<items.length)await fn(items[next++]!);}));
 }
 
+/** Every change in the clip's picture, as spans; even spans when the frame host cannot sample. */
+export async function momentSpans(input:Pick<UnderstandInput,'hash'|'duration'|'frames'>,progress?:(message:string)=>void):Promise<Span[]> {
+  const every=sampleEvery(input.duration);
+  if(!input.frames.sample)return evenSpans(input.duration);
+  progress?.('Looking for every change in the picture');
+  // An older desktop cannot sample: even spans, coarser but still described.
+  try {return changeSpans(await input.frames.sample(input.hash,every,SAMPLE_W,SAMPLE_H),{every,duration:input.duration});}
+  catch(e) {progress?.(`Change detection failed, using even spans: ${e instanceof Error?e.message:e}`);return evenSpans(input.duration);}
+}
+
 /** Frames per call to the frame host (a relay answer carries at most 64 files). */
 const FRAME_BATCH=48;
 
@@ -138,13 +150,7 @@ const FRAME_BATCH=48;
  */
 export async function denseMoments(input:UnderstandInput,model:VisionModel,o:UnderstandOptions={}):Promise<ClipMoments> {
   const t0=Date.now(),every=sampleEvery(input.duration);
-  let spans=evenSpans(input.duration);
-  if(input.frames.sample) {
-    o.progress?.('Looking for every change in the picture');
-    // An older desktop cannot sample: even spans, coarser but still described.
-    try {spans=changeSpans(await input.frames.sample(input.hash,every,SAMPLE_W,SAMPLE_H),{every,duration:input.duration});}
-    catch(e) {o.progress?.(`Change detection failed, using even spans: ${e instanceof Error?e.message:e}`);}
-  }
+  const spans=await momentSpans(input,o.progress);
   const ids=spans.map((_,k)=>`M${String(k+1).padStart(3,'0')}`);
   const jpegs:(Uint8Array|null)[]=[];
   for(let i=0;i<spans.length;i+=FRAME_BATCH)jpegs.push(...await input.frames.frames(input.hash,spans.slice(i,i+FRAME_BATCH).map(s=>s.frame),o.width??1024));
