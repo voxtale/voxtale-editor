@@ -45,14 +45,23 @@ core (`voxtale-editor/video/editor/mcp`), this app only starts it.
    claude mcp add voxtale-editor --scope user -e ASSEMBLYAI_API_KEY=your-key -e OPENROUTER_API_KEY=your-key -- bun $HOME\voxtale\apps\editor-mcp\src\main.ts
    ```
 
-   `OPENROUTER_API_KEY` (openrouter.ai) is optional. With it, `open` labels
-   each b-roll and screen clip with a vision model, the same pass the cloud
-   editor runs, so the agent can search footage (`find_footage`) and see
-   when a synced screen changes (`screen_activity`). It costs roughly
-   1-3 cents and under a minute per minute of footage; the talking-head
-   clip is not labelled. Labels are kept in `.edit/moments/`, so opening the
-   same files again costs nothing. Without the key, `open` only transcribes
-   and those two tools stay off.
+   `OPENROUTER_API_KEY` (openrouter.ai) is optional but recommended for
+   video. One setting picks who labels each b-roll and screen clip, so the
+   agent can search footage (`find_footage`) and see when a synced screen
+   changes (`screen_activity`): `VOXTALE_EDITOR_VISION`.
+
+   - `openrouter` (default when the key is set): `open` labels the footage
+     with a Gemini model (`VIDEO_INDEX_MODEL` to change it), the same pass
+     the cloud editor runs. Roughly 1-3 cents and under a minute per minute
+     of footage; the talking-head clip is not labelled.
+   - `harness` (default with no key; or `-e VOXTALE_EDITOR_VISION=harness`):
+     the server calls no model. `label_footage` hands the agent contact
+     sheets of each clip's picture changes; it describes them and
+     `save_labels` keeps the labels. Free here; it spends the agent's own
+     context.
+
+   Either way labels are kept in `.edit/moments/`, so opening the same files
+   again costs nothing.
 
 4. Renders take minutes. Let Claude Code wait for them:
 
@@ -93,7 +102,8 @@ off with `-e VOXTALE_GRAPHICS=off` on the `claude mcp add` line.
 
 - Tools: `editing_guide`, `open`, `resume`, the editor tools (`get_transcript`,
   `set_cut`, `timeline_view`, `watch_cut`, `show_footage`, `find_footage` and
-  `screen_activity` (with `OPENROUTER_API_KEY`), `set_captions`,
+  `screen_activity` (once footage is labelled), `label_footage` and
+  `save_labels` (harness mode), `set_captions`,
   `set_zooms`, `place_text`, `render_graphic`, `place_graphic`, `set_music`,
   `set_sfx`, `set_look`, `propose_rule`, `finish`, …), `render`, `sheet`,
   `clips`, `export_timeline`, `rules`, `decide_rule`.

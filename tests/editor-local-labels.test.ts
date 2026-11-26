@@ -16,6 +16,9 @@ import {jobTools,newJob,styleFor,understandClips} from '../src/video/editor/agen
 import type {JobClip} from '../src/video/editor/agent/cut';
 import {loadProject,openProject,projectAt} from '../src/video/editor/local-mcp/project';
 import {editingGuide} from '../src/video/editor/local-mcp/guide';
+import {labelTools,savedMoments} from '../src/video/editor/local-mcp/label-tools';
+import {visionMode} from '../src/video/editor/local-mcp/vision-mode';
+import {keepProject} from '../src/video/editor/local-mcp/project';
 
 const H=(c:string)=>c.repeat(64);
 const clip=(id:string,role:string,o:{words?:JobClip['words'];kind?:'video'|'audio';duration?:number}={}):JobClip=>({
@@ -102,7 +105,7 @@ describe('local open labels footage',()=>{
     expect((await loadProject(a)).p.job.clips.find(c=>c.ref.role==='screen')!.moments?.moments.length).toBe(screen.moments!.moments.length);
   },60000);
 
-  test('without a vision model: transcripts only, footage tools stay hidden, the log says why',async()=>{
+  test('harness open: transcripts only, footage tools hidden until the agent labels, the log says how',async()=>{
     const {folder,files}=await footage();
     const a=projectAt(folder);
     const lines:string[]=[];
@@ -110,7 +113,7 @@ describe('local open labels footage',()=>{
     expect(existsSync(join(a.dir,'moments'))).toBe(false);
     const {ws}=await loadProject(a);
     expect(jobTools(ws).map(t=>t.name)).not.toContain('find_footage');
-    expect(lines.some(l=>l.includes('OPENROUTER_API_KEY'))).toBe(true);
+    expect(lines.some(l=>l.includes('OPENROUTER_API_KEY')&&l.includes('label_footage'))).toBe(true);
   },60000);
 
   test('the guide follows whether the server can label',()=>{
@@ -124,4 +127,48 @@ describe('local open labels footage',()=>{
     expect(g).toMatch(/closing line/i);
     expect(g).toMatch(/vlog/i);
   });
+});
+
+describe('vision setting',()=>{
+  test('openrouter with a key, harness without; the setting wins; bad values warn',()=>{
+    expect(visionMode({OPENROUTER_API_KEY:'k'}).mode).toBe('openrouter');
+    expect(visionMode({}).mode).toBe('harness');
+    expect(visionMode({OPENROUTER_API_KEY:'k',VOXTALE_EDITOR_VISION:'harness'}).mode).toBe('harness');
+    const noKey=visionMode({VOXTALE_EDITOR_VISION:'openrouter'});
+    expect(noKey.mode).toBe('harness');
+    expect(noKey.warning).toContain('OPENROUTER_API_KEY');
+    expect(visionMode({OPENROUTER_API_KEY:'k',VOXTALE_EDITOR_VISION:'gpt'}).warning).toContain('not one of');
+  });
+});
+
+describe('harness: the agent labels footage',()=>{
+  test('label_footage shows a sheet, save_labels keeps labels, find_footage reads them, open again reuses them',async()=>{
+    const {folder,files}=await footage();
+    const a=projectAt(folder);
+    await openProject(a,{files,vision:null},()=>{});
+    let {p,ws}=await loadProject(a);
+    let changed=0;
+    const tools=labelTools({current:()=>({dir:a.dir,ws,keep:()=>keepProject(a,p,ws)}),changed:()=>{changed++;}});
+    const run=(n:string,x:unknown)=>tools.find(t=>t.name===n)!.run(x,{progress:()=>{}} as any);
+    const shown=await run('label_footage',{});
+    expect(shown.images?.length).toBe(1);
+    const ids=[...shown.text.matchAll(/ (M\d{3}) \[/g)].map(m=>m[1]!);
+    expect(ids.length).toBeGreaterThan(1);
+    const screen=p.job.clips.find(c=>c.ref.role==='screen')!;
+    const saved=await run('save_labels',{clip:screen.ref.id,labels:[...ids.map(id=>({id,description:`slide ${id}`,subjects:['chart']})),{id:'M999',description:'x'}]});
+    expect(saved.text).toContain('M999');
+    expect(changed).toBe(1);
+    expect((await savedMoments(a.dir,screen.ref.hash))!.provider).toBe('agent');
+    expect(jobTools(ws).map(t=>t.name)).toContain('find_footage');
+    expect((await jobTools(ws).find(t=>t.name==='find_footage')!.run({clip:screen.ref.id})).text).toContain('slide M001');
+
+    // Open again in harness mode: labels come back with no work.
+    await openProject(a,{files,vision:null},()=>{});
+    ({p,ws}=await loadProject(a));
+    expect(p.job.clips.find(c=>c.ref.role==='screen')!.moments?.moments[0]!.description).toBe('slide M001');
+    // Open with a vision model: a fully labelled agent file is kept, no calls.
+    const v=fakeVision();
+    await openProject(a,{files,vision:v.vision},()=>{});
+    expect(v.seen.calls).toBe(0);
+  },60000);
 });

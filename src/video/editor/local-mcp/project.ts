@@ -1,7 +1,8 @@
 import {ffmpegPath,ffprobePath} from '../../ffmpeg-path';
 // One edit per footage folder, kept in <folder>/.edit/. `openProject` reads
 // the footage, transcribes speech and, given a vision model, labels the
-// footage the way the cloud planner does (`labelFootage`), `loadProject` rebuilds the editor's
+// footage the way the cloud planner does (`labelFootage`; else the agent
+// labels it, label-tools.ts), `loadProject` rebuilds the editor's
 // workspace from disk, `keepProject` writes back what save() does not. Each
 // call can load, run one tool and keep, so nothing lives only in memory.
 import {createHash} from 'node:crypto';
@@ -17,6 +18,7 @@ import {beatsOfFile} from '../../beats';
 import type {FaceFinder,VisionModel} from '../../footage-index';
 import type {Edit} from '../../model';
 import {denseMoments,freshMoments,type ClipMoments} from '../../moments';
+import {attachLabels,savedMoments} from './label-tools';
 import {loudnessReport,renderEditDoc,type OutputShape} from '../../render-edit';
 import {nativeSubjectMask} from '../../../native/bridge';
 import {transcribe} from '../../transcript';
@@ -42,7 +44,7 @@ export interface OpenOptions {files:OpenFile[];
   proxies?:boolean;style?:string;target?:number;instruction?:string;format?:Format;
   /** A style folder, resolved (../styles/use): its EditStyle wins over `style`. */
   styled?:{style:EditStyle;use:StyleUse};
-  /** Labels footage for find_footage and screen_activity; null = transcribe only (the reason is logged). */
+  /** Labels footage for find_footage and screen_activity (vision mode openrouter); null = harness: the agent labels with label_footage. */
   vision?:VisionModel|null}
 export interface Project {job:Job;sources:Record<string,string>;voiceover:boolean;
   /** Light 720p copies by clip hash: previews, filmstrips and look samples read these; the render reads `sources`. */
@@ -218,7 +220,11 @@ export async function openProject(a:At,o:OpenOptions,log:Log):Promise<void> {
   }
   for(const s of job.sync??[])log(`${s.clip} recorded with ${s.with} (same clock${s.offset?`, ${s.offset>0?'+':''}${s.offset.toFixed(3)}s`:''}): show it with sync:true`);
   if(o.vision)await labelFootage(a,job,sources,o.vision,log);
-  else if(understandClips(job).length)log('footage not labelled (no OPENROUTER_API_KEY): find_footage and screen_activity are off; look with timeline_view');
+  else if(understandClips(job).length) {
+    // Harness mode: the agent labels (label_footage, save_labels); labels it kept before come back.
+    const l=await attachLabels(a.dir,job);
+    log(`footage not labelled by the server (vision: harness): ${l.labelled}/${l.total} clips have your labels from before. label_footage shows the rest to you; find_footage and screen_activity read what save_labels keeps. For a Gemini model to label at open, the creator sets OPENROUTER_API_KEY`);
+  }
   await writeFile(projectFile(a),JSON.stringify({job,sources,voiceover:files.some(f=>f.voice),
     ...(Object.keys(proxies).length?{proxies}:{}),...(multicam?{multicam}:{})} satisfies Project,null,1));
   await writeFile(join(a.dir,'state.json'),'{}');
@@ -249,7 +255,10 @@ export async function labelFootage(a:At,job:Job,sources:Record<string,string>,vi
   for(const c of todo) {
     const clip=job.clips.find(x=>x.ref.id===c.id)!;
     const file=join(a.dir,'moments',`${c.hash.slice(0,16)}.json`);
-    let m:ClipMoments|undefined=freshMoments(await readJson<unknown>(file,null).catch(()=>null),c.hash);
+    // Labels the agent finished in harness mode are kept too.
+    const agent=await savedMoments(a.dir,c.hash);
+    let m:ClipMoments|undefined=freshMoments(await readJson<unknown>(file,null).catch(()=>null),c.hash)
+      ??(agent?.provider==='agent'&&agent.moments.every(x=>x.description)?agent:undefined);
     if(m)log(`  ${c.id} ${clip.ref.name}: ${m.moments.length} moments (kept from an earlier open)`);
     else {
       try {

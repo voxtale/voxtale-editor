@@ -4,6 +4,7 @@
 // Plus the EditDoc guide, for an agent rebuilding the edit in another editor.
 import {AGENT_SKILL_PROMPT_ID} from '../agent/skill';
 import {promptText} from '../../../services/prompts';
+import {LABEL_FOOTAGE_TEXT} from './label-text';
 
 /** Short, for the server's `instructions`: every client shows it to the model. */
 export const SERVER_INSTRUCTIONS=`VoxTale editor: edits raw footage (talking head, voiceover, b-roll, screen recordings) into a finished video on this machine. Read editing_guide first, then open with the footage files. Every tool works on the open project, kept in <folder>/.edit/. Tools that return pictures are how you see the footage: look at them. The result is an MP4 (render) and an EditDoc (.edit/edit.json). export_timeline writes FCPXML or OTIO for Resolve, Premiere or Final Cut; for any other editor, read the editdoc://guide resource and call clips, then translate.`;
@@ -32,7 +33,7 @@ the style; what they want in or out.
     :'Graphics: off on this server (no graphics tools): use footage and text.'}
    ${labels
     ?'`find_footage` and `screen_activity` read the labels from `open`; a clip that failed to label is left out of them.'
-    :'`find_footage` and `screen_activity` are off: labelling footage needs OPENROUTER_API_KEY in the server\'s environment. Look with `timeline_view`.'}
+    :LABEL_FOOTAGE_TEXT}
    Look at footage with \`survey_clips\` before you choose or place it.
 4. After \`finish\`: \`render\` (default <folder>/final.mp4), then \`sheet\`
    and look at it. Fix what looks wrong and render again. If the brief
