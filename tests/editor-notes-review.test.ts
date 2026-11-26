@@ -130,12 +130,10 @@ describe('ripple close',()=>{
 });
 
 describe('skill v28',()=>{
-  test('is the active editor skill and names the tools the four branches added',async()=>{
+  test('stays registered and names the tools the four branches added',async()=>{
     const {AGENT_SKILL_PROMPT_ID}=await import('../src/video/editor/agent/skill');
-    const {listPrompts,promptText,promptTextVersion}=await import('../src/services/prompts');
-    expect(listPrompts().find(p=>p.id===AGENT_SKILL_PROMPT_ID)?.active).toBe(28);
-    const skill=promptText(AGENT_SKILL_PROMPT_ID);
-    expect(skill).toBe(promptTextVersion(AGENT_SKILL_PROMPT_ID,28));
+    const {promptTextVersion}=await import('../src/services/prompts');
+    const skill=promptTextVersion(AGENT_SKILL_PROMPT_ID,28);
     expect(skill).not.toBe(promptTextVersion(AGENT_SKILL_PROMPT_ID,27));
     for(const t of ['finish','styles','use_style','learn_style','create_style','add_style_file','propose_rule','decide_rule',
       'set_angles','set_av_offset','set_look','make_graphic','list_scenes','write_scene','render_scene','behindSubject'])expect(skill).toContain(t);

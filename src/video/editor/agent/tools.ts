@@ -235,12 +235,18 @@ function joinSounds(ws:Workspace):string[] {
   return out;
 }
 
+/** The logo clip's image on this machine, for watch_cut stills: the brand-kit file, else the creator's clip. */
+function logoFile(ws:Workspace,clipId:string):string|undefined {
+  const l=ws.logo;
+  return l&&l.ref.id===clipId?l.path??ws.media?.[l.ref.hash]:undefined;
+}
+
 /** watch_cut changed:true: frames only where the edit differs from the last watch, text drawn, legibility measured. */
 async function watchChanged(ws:Workspace,doc:EditDoc):Promise<ToolResult> {
   const seen=ws.seenDoc,moments=changedMoments(seen,doc);
   if(!moments.length)return {text:seen?'Nothing on screen changed since you last watched.':'Nothing to show yet.'};
   const hashOf=(id:string)=>{const c=ws.job.clips.find(x=>x.ref.id===id);return c&&c.ref.kind!=='audio'?c.ref.hash:undefined;};
-  const shots=previewShots(doc,moments.map(m=>m.t),hashOf,id=>ws.graphics[id]?.webm);
+  const shots=previewShots(doc,moments.map(m=>m.t),hashOf,id=>ws.graphics[id]?.webm,id=>logoFile(ws,id));
   const tall=doc.canvas.height>doc.canvas.width,width=tall?360:640;
   const size={width,height:Math.round(width*doc.canvas.height/doc.canvas.width/2)*2};
   const dir=join(ws.dir,'preview',`changed-${ws.edits??0}`);
@@ -539,7 +545,7 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
         const to=Math.min(end??total,total);
         if(to<=start)throw new Error(`the cut runs 0-${total.toFixed(1)}s`);
         const hashOf=(id:string)=>{const c=ws.job.clips.find(x=>x.ref.id===id);return c&&c.ref.kind!=='audio'?c.ref.hash:undefined;};
-        const shots=previewShots(doc,previewTimes(start,to,frames),hashOf,id=>ws.graphics[id]?.webm);
+        const shots=previewShots(doc,previewTimes(start,to,frames),hashOf,id=>ws.graphics[id]?.webm,id=>logoFile(ws,id));
         const img=await drawPreview({shots,canvas:doc.canvas,frames:ws.frames,dir:join(ws.dir,'preview',String(ws.edits??0)),ff,...(ws.cutout?{cutout:ws.cutout}:{})});
         if(start<=0.01&&to>=total-0.01)ws.watchedAt=ws.edits;
         ws.seenDoc=doc;

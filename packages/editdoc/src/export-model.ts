@@ -327,6 +327,20 @@ export function buildExportTimeline(doc: EditDoc, media: ExportMedia): ExportTim
     }];
   }, true));
 
+  // ---- logos: the brand picture over graphics (mirrors planRender); height keeps the image's shape
+  const logos = doc.logos.filter(l => clips.get(l.clipId)?.kind === "image");
+  video.push(...laned(logos, "Logo", "video", "graphics", l => {
+    use("graphics", l.id);
+    if (l.opacity < 1) use("opacity", l.id);
+    const s = source(l.clipId);
+    const width = l.w * doc.canvas.width;
+    return [{
+      id: l.id, itemId: l.id, sourceId: s.id, start: F(l.start), end: F(l.end), in: 0, out: l.end - l.start, speed: 1,
+      picture: { box: { x: l.x * doc.canvas.width, y: l.y * doc.canvas.height, width, height: width * s.height / s.width }, fit: "contain", zoom: [], opacity: l.opacity, ...fades(l.id, l) },
+      note: { owner: l.owner },
+    }];
+  }));
+
   // ---- sound
   const audio: ExportTrack[] = [];
   const gain = (id: string, db: number) => { if (Math.abs(db) > 1e-6) use("gain", id); return db; };

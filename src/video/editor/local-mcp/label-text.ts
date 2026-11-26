@@ -1,7 +1,7 @@
 // Agent text for footage labelling on the local MCP in harness mode
 // (VOXTALE_EDITOR_VISION=harness, or no OPENROUTER_API_KEY): the server calls
 // no model; the agent driving it looks at the frames and writes the labels.
-// Kept apart so the coordinator can fold it into the next skill version.
+// LABEL_FOOTAGE_TEXT sits in the local guide (guide.ts); harness mode is local-only, so not in the skill.
 // LABEL_MOMENTS_TEXT adapts the vision prompt video.moments v1 (prompts.ts).
 
 /** For the editing guide's "On this server" section. */

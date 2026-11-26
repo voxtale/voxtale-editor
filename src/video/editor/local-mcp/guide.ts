@@ -4,10 +4,11 @@
 // Plus the EditDoc guide, for an agent rebuilding the edit in another editor.
 import {AGENT_SKILL_PROMPT_ID} from '../agent/skill';
 import {promptText} from '../../../services/prompts';
+import {MISSING_NATIVES_NOTE} from '../agent/setup-skill-text';
 import {LABEL_FOOTAGE_TEXT} from './label-text';
 
 /** Short, for the server's `instructions`: every client shows it to the model. */
-export const SERVER_INSTRUCTIONS=`VoxTale editor: edits raw footage (talking head, voiceover, b-roll, screen recordings) into a finished video on this machine. Read editing_guide first, then open with the footage files. Every tool works on the open project, kept in <folder>/.edit/. Tools that return pictures are how you see the footage: look at them. The result is an MP4 (render) and an EditDoc (.edit/edit.json). export_timeline writes FCPXML or OTIO for Resolve, Premiere or Final Cut; for any other editor, read the editdoc://guide resource and call clips, then translate.`;
+export const SERVER_INSTRUCTIONS=`VoxTale editor: edits raw footage (talking head, voiceover, b-roll, screen recordings) into a finished video on this machine. Read editing_guide first, then open with the footage files. Every tool works on the open project, kept in <folder>/.edit/. Tools that return pictures are how you see the footage: look at them. The result is an MP4 (render) and an EditDoc (.edit/edit.json). export_timeline writes a timeline for Premiere, Resolve, Final Cut or OTIO; for any other editor, read the editdoc://guide resource and call clips, then translate.`;
 
 const LOCAL=(graphics:boolean,labels:boolean)=>`## On this server
 
@@ -20,11 +21,15 @@ the style; what they want in or out.
    screen, screen_synced (a screen recorded together with the speaker),
    music, sfx. It transcribes speech (about 1 min per 10 min of speech) and
    lists the clips, with any that share the speaker's clock. Opening again
-   starts over; \`resume\` continues an edit already in the folder.${labels?`
+   starts over; \`resume\` continues an edit already in the folder.
+${labels?`
    It also labels each b-roll and screen clip with a vision model, as the
    cloud editor does: roughly 1-3 cents and under a minute per minute of
    footage. Tell the creator before opening long footage. Labels are kept
    in .edit/, so opening the same files again costs nothing.`:''}
+   It warns when a talk clip's sound is out of step with the lips (first
+   30 s); fix it as the warning says.
+${MISSING_NATIVES_NOTE.replace(/^- /,'   ')}
 2. The speaker's clip sets the picture's shape. A voiceover takes
    \`format\`, else the shape of the first footage. Pick \`style\` to suit
    the video.
@@ -40,10 +45,11 @@ the style; what they want in or out.
    names a size or frame rate, pass width, height, fps (and fit) to
    \`render\`, then check the size it reports. Tell the creator where the
    file is and what you cut.
-5. Another editor: \`export_timeline\` writes FCPXML (Resolve, Final Cut,
-   Premiere) or OTIO, plus an SRT of the captions. For an editor with its
-   own tools, read the editdoc://guide resource, call \`clips\` for the file
-   paths, and rebuild the edit there. Say what did not carry over.
+5. Another editor: \`export_timeline\` with the creator's app as target
+   (premiere, resolve, finalcut, otio); it also writes an SRT of the
+   captions. Tell them each "not carried" line it reports. For an editor
+   with its own tools, read the editdoc://guide resource, call \`clips\` for
+   the file paths, and rebuild the edit there. Say what did not carry over.
 6. Do not edit .edit/ files by hand. The creator may: \`resume\` reads
    what they changed and keeps it as theirs. If \`open\` fails on
    transcription, the creator sets ASSEMBLYAI_API_KEY in the server's

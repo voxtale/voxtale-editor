@@ -49,6 +49,17 @@ const track=(t:ReturnType<typeof buildExportTimeline>,name:string)=>[...t.video,
 
 describe('export model',()=>{
   const t=buildExportTimeline(sample(),media);
+  it('carries a placed logo as a picture over the graphics, its height from the image',()=>{
+    const d=sample();
+    const withLogo=parseEditDoc({...d,clips:[...d.clips,clip('logo',{kind:'image',role:'logo',width:400,height:100,hasAudio:false,fps:undefined})],
+      logos:[{id:'logo-1',clipId:'logo',start:1,end:3,owner:'agent',x:0.8,y:0.05,w:0.1,opacity:0.5}]}).doc;
+    const lt=buildExportTimeline(withLogo,media);
+    const l=track(lt,'Logo').clips;
+    expect(l.map(c=>[c.itemId,c.sourceId,c.start,c.end])).toEqual([['logo-1','logo',25,75]]);
+    expect(l[0]!.picture).toMatchObject({box:{x:1536,y:54,width:192,height:48},fit:'contain',opacity:0.5});
+    expect(lt.video.findIndex(x=>x.name==='Logo')).toBeGreaterThan(lt.video.findIndex(x=>x.role==='graphics'&&x.name!=='Logo'));
+    expect(t.video.some(x=>x.name==='Logo')).toBe(false);
+  });
   it('plays the picked angle, through the sync group, from the file start',()=>{
     const a=track(t,'A-roll').clips;
     expect(a.map(c=>[c.itemId,c.sourceId,c.start,c.end,c.in])).toEqual([

@@ -95,6 +95,28 @@ describe('watch_cut sheet (ffmpeg)',()=>{
     expect(shot.notes).toContain('speaker cut out over the graphic');
   },60_000);
 
+  test('a placed logo is drawn in the still at its corner, its see-through kept',async()=>{
+    // Logo: 80x40 PNG, white left half, see-through right half.
+    const png=join(dir,'logo.png');
+    await ff(['-f','lavfi','-i','color=c=white@1:s=80x40,format=rgba,geq=r=255:g=255:b=255:a=if(lt(X\\,W/2)\\,255\\,0)','-frames:v','1',png]);
+    const doc=cut();
+    doc.clips.push(clipRefSchema.parse({id:'brand-logo',hash:hash('c'),name:'logo.png',kind:'image',role:'logo',roleSource:'creator',duration:3600,width:80,height:40,hasAudio:false}));
+    doc.logos=[{id:'logo-1',clipId:'brand-logo',start:0,end:2,owner:'agent',x:0.5,y:0.1,w:0.25,opacity:1}];
+    const [shot,after]=previewShots(doc,[1,3],hashOf,()=>undefined,id=>id==='brand-logo'?png:undefined);
+    expect(shot!.logos).toEqual([{file:png,x:0.5,y:0.1,w:0.25,opacity:1}]);
+    expect(shot!.notes).toContain('logo logo-1');
+    expect(after!.logos).toBeUndefined();
+    expect(previewShots(doc,[1],hashOf,()=>undefined)[0]!.notes).toContain('logo logo-1 (not drawn)');
+    const sheet=await drawPreview({shots:[shot!],canvas:doc.canvas,frames:localFrames({sources,dir:join(dir,'frames3')}),dir:join(dir,'preview3'),ff});
+    const {px,w,h}=await grey(sheet);
+    const at=(x:number,y:number)=>px[Math.round(y)*w+Math.round(x)]!;
+    // Logo box: x 0.5-0.75, y 0.1 to 0.1+0.125*16/9 of the frame. Left half white, right half shows the black speaker.
+    const y=h*(0.1+0.125*w/h/2);
+    expect(at(w*0.56,y)).toBeGreaterThan(215);
+    expect(at(w*0.69,y)).toBeLessThan(40);
+    expect(at(w*0.3,h/2)).toBeLessThan(40);
+  },60_000);
+
   test('finish sends an unwatched cut back once; a full watch clears it',async()=>{
     const ws:Workspace={dir:join(dir,'ws'),job,segments:[],placements:[],captions:[],zooms:[],broll:[],text:[],chapters:[],graphics:{},graphicsEnabled:false,
       frames:localFrames({sources,dir:join(dir,'frames2')})};

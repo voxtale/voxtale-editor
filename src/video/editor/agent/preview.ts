@@ -1,6 +1,6 @@
 // The cut as a viewer sees it: frames of the OUTPUT timeline, layers stacked
 // as the render stacks them (speaker with its zoom, shown footage with crop,
-// the speaker's corner picture, graphics). The agent watches its own edit
+// the speaker's corner picture, graphics, the brand logo). The agent watches its own edit
 // down before it finishes. ffmpeg only, no model. Source frames come through
 // the frame host, so a cloud run can watch a cut whose files it never holds.
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
@@ -30,6 +30,8 @@ export interface PreviewShot {
   layers:PreviewLayer[];
   /** Rendered overlays up at `t`, with the second into each; behind: the speaker is drawn back over it. */
   graphics:{webm:string;t:number;behind?:boolean}[];
+  /** Brand logos up at `t`, drawn last: the image file, top-left and width as fractions of the canvas. */
+  logos?:{file:string;x:number;y:number;w:number;opacity:number}[];
   /** What is on screen and in the mix, in words. */
   notes:string[];
 }
@@ -49,9 +51,11 @@ export function previewTimes(start:number,end:number,count:number):number[] {
 
 /**
  * What the render shows at each output second. `hashOf` gives a clip's hash
- * when it has a picture; `webmOf` a graphic's rendered file on this machine.
+ * when it has a picture; `webmOf` a graphic's rendered file on this machine;
+ * `logoOf` a logo clip's image file on this machine.
  */
-export function previewShots(doc:EditDoc,times:number[],hashOf:(clipId:string)=>string|undefined,webmOf:(assetId:string)=>string|undefined):PreviewShot[] {
+export function previewShots(doc:EditDoc,times:number[],hashOf:(clipId:string)=>string|undefined,webmOf:(assetId:string)=>string|undefined,
+  logoOf:(clipId:string)=>string|undefined=()=>undefined):PreviewShot[] {
   const kind=new Map(doc.clips.map(c=>[c.id,c.kind]));
   return times.map(t=>{
     const layers:PreviewLayer[]=[],notes:string[]=[],graphics:PreviewShot['graphics']=[];
@@ -79,11 +83,17 @@ export function previewShots(doc:EditDoc,times:number[],hashOf:(clipId:string)=>
       if(webm)graphics.push({webm,t:t-g.start,...(g.behindSubject&&speaker?{behind:true}:{})});
       notes.push(`graphic ${g.assetId} (${g.placement}${g.behindSubject?', behind the speaker':''}${webm?'':', not drawn'})`);
     }
+    const logos:NonNullable<PreviewShot['logos']>=[];
+    for(const l of (doc.logos??[]).filter(l=>kind.get(l.clipId)==='image'&&l.start<=t+1e-6&&t<l.end-1e-6)) {
+      const file=logoOf(l.clipId);
+      if(file)logos.push({file,x:l.x,y:l.y,w:l.w,opacity:l.opacity});
+      notes.push(`logo ${l.id}${file?'':' (not drawn)'}`);
+    }
     for(const x of on(doc.tracks.text,t))notes.push(`text ${x.template} "${x.text}" (not drawn)`);
     const cap=on(doc.tracks.captions,t)[0];
     if(cap)notes.push(`caption "${cap.text}" (not drawn)`);
     if(on(doc.tracks.music,t).length)notes.push('music');
-    return {t,layers,graphics,notes};
+    return {t,layers,graphics,...(logos.length?{logos}:{}),notes};
   });
 }
 
@@ -167,6 +177,14 @@ export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;he
       last=`o${idx}`;
       idx+=2;
       s.notes.push('speaker cut out over the graphic');
+    }
+    // The brand logo over everything so far, its own shape and see-through kept, as the render draws it.
+    for(const l of s.logos??[]) {
+      inputs.push('-i',l.file);
+      graph.push(`[${idx}:v]format=rgba,scale=${even(l.w*cw)}:-2${l.opacity<1?`,colorchannelmixer=aa=${l.opacity}`:''}[l${idx}]`,
+        `[${last}][l${idx}]overlay=${Math.round(l.x*cw)}:${Math.round(l.y*ch)}[o${idx}]`);
+      last=`o${idx}`;
+      idx++;
     }
     const out=join(o.dir,`shot-${i}.jpg`);
     if(graph.length)await ff([...inputs,'-filter_complex',graph.join(';'),'-map',`[${last}]`,'-frames:v','1',out]);

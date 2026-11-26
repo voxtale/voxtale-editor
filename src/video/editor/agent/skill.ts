@@ -7,6 +7,8 @@ import {registerPrompt} from '../../../services/prompts';
 import {LOG_COLOUR_SKILL_TEXT,MULTICAM_SKILL_TEXT} from './media-skill-text';
 import {BEHIND_SUBJECT_SKILL_TEXT,PAPERCRAFT_SKILL_TEXT,PIXEL_SKILL_TEXT,SCENES_SKILL_TEXT} from './scene-skill';
 import {NOTES_SKILL_TEXT} from './skill-notes';
+import {PIXEL_FONT_NOTE} from './setup-skill-text';
+import {LOGO_SKILL_TEXT,TEMPLATES_SKILL_TEXT} from './logo-templates-skill-text';
 import {STYLE_SKILL_TEXT} from '../styles/agent-text';
 
 const SKILL_V20=`# VoxTale editor
@@ -1044,4 +1046,37 @@ brief: follow them, and say in \`finish\` when this video could not keep one.
 `],
 ];
 
-export const AGENT_SKILL_PROMPT_ID=registerPrompt('video.agent-editor',{20:SKILL_V20,21:SKILL_V21,22:SKILL_V22,23:withMechanics(SKILL_V22),24:SKILL_V24,25:SKILL_V25,26:withEdits(SKILL_V25,FINISH_TOOLS_V26),27:SKILL_V27,28:withEdits(SKILL_V27,MERGE_V28)});
+const SKILL_V28=withEdits(SKILL_V27,MERGE_V28);
+
+/**
+ * v29: round-two branches. Brand logo (place_logo) and where it sits; the
+ * four new make_graphic templates in the Graphics process; watch_cut stills
+ * now show the cut-out speaker and the logo; DJI's own LUT for D-Log M; a
+ * pixel font ships (setup-skill-text.ts). The style section no longer puts
+ * the corner logo in a graphic. Local-only text (harness labels, missing
+ * natives, A/V and LUT at open, export targets) lives in local-mcp/guide.ts.
+ */
+const MERGE_V29:[old:string,text:string][]=[
+  [`(list, stat, before/after, key term, compare, title, flow) says it;`,TEMPLATES_SKILL_TEXT],
+  [`without it the graphic is drawn over the speaker and the render reports it. The stills you check do not show the cut-out: judge the overlap from the speaker's place in the frame.`,
+   `without it the graphic is drawn over the speaker and the render reports it. watch_cut draws the cut-out as the export does: judge the overlap there.`],
+  [`### Taste
+`,`${LOGO_SKILL_TEXT}
+### Taste
+`],
+  [`- The renderer ships Inter and JetBrains Mono, not a pixel font: pixelFont('JetBrains Mono', 700, size) drawn with g.text has no smoothing. Check in the stills that C does not read as O, nor 3 as 8: too bold and letters fill in.`,
+   PIXEL_FONT_NOTE],
+  [`DJI D-Log M and
+Osmo Pocket 4 D-Log have no formula: ask for DJI's .cube and pass it as
+\`inputLut\`.`,
+   `DJI D-Log M has no
+formula: where the editor has DJI's own LUT it converts the clip and says
+"converted with"; else, and for Osmo Pocket 4 D-Log, ask for DJI's .cube and
+pass it as \`inputLut\`.`],
+  [`put the logo with <img class="logo" src="./brand/...">
+  where it reads.`,
+   `the corner mark is \`place_logo\`,
+  not part of a graphic.`],
+];
+
+export const AGENT_SKILL_PROMPT_ID=registerPrompt('video.agent-editor',{20:SKILL_V20,21:SKILL_V21,22:SKILL_V22,23:withMechanics(SKILL_V22),24:SKILL_V24,25:SKILL_V25,26:withEdits(SKILL_V25,FINISH_TOOLS_V26),27:SKILL_V27,28:SKILL_V28,29:withEdits(SKILL_V28,MERGE_V29)});
