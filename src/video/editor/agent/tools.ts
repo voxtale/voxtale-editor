@@ -571,7 +571,8 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
     }),
     defineTool({name:'place_graphic',description:'Put a rendered graphic on the timeline, starting on a source word (it follows that word through recuts; dropped if the word is cut). Same id again moves it.',
       input:{id:z.string(),clip:z.string(),word:z.number().int(),seconds:z.number().min(0.5).max(15),
-        reason:z.string().max(200),fade:fadeField},
+        reason:z.string().max(200),fade:fadeField,
+        behindSubject:z.boolean().optional().describe('text behind the speaker: the speaker is cut out and drawn over the graphic at export (a full-frame graphic with see-through around its text; needs the subject mask model, else drawn over and reported)')},
       run:async(p)=>{
         if(!ws.graphics[p.id])throw new Error(`graphic ${p.id} has not rendered; call make_graphic, render_graphic or render_scene first`);
         if(!ws.segments.length)throw new Error('set a cut first');

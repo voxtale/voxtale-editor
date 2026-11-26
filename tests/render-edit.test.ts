@@ -3,7 +3,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pipBox,newEditDoc,parseEditDoc,renderClipHashes,STYLE_PRESETS,type ClipRef,type EditDoc} from '@voxtale/editdoc';
-import {assScript,keyedExpr,MissingMediaError,planRender,renderEditDoc} from '../src/video/render-edit';
+import {assScript,keyedExpr,MissingMediaError,planRender,renderEditDoc,subjectSpans,type SubjectMasker} from '../src/video/render-edit';
 
 const hasFfmpeg=Bun.spawnSync(['ffmpeg','-version']).exitCode===0;
 const fps={num:30,den:1};
@@ -55,6 +55,24 @@ describe('planRender',()=>{
     const media={[hash('a')]:'/r',[hash('b')]:'/b',[hash('c')]:'/c',[hash('d')]:'/d'};
     const p=planRender(doc({graphics:[{id:'g1',assetId:'ga-1',start:0,end:1,owner:'agent'}]}),media);
     expect(p.skipped).toEqual([{itemId:'g1',reason:'graphic-not-ready'}]);
+  });
+  it('behind the speaker: spans skip full-frame b-roll; the masked a-roll goes over the graphic, or it is reported',()=>{
+    const media={[hash('a')]:'/r',[hash('b')]:'/b',[hash('c')]:'/c',[hash('d')]:'/d'};
+    const d=doc({graphics:[{id:'g1',assetId:'ga-1',start:0.5,end:2.5,owner:'agent',behindSubject:true}]});
+    const spans=subjectSpans(d);
+    expect(spans.map(x=>[x.arollId,x.start,x.end,x.srcStart])).toEqual([['a1',0.5,1,0.5],['a1',1.5,2,1.5],['a2',2,2.5,1]]);
+    const bare=planRender(d,media,{'ga-1':'/g.webm'});
+    expect(bare.skipped).toEqual([{itemId:'g1',reason:'subject-mask-missing'}]);
+    expect(bare.pictures.some(p=>p.mask)).toBe(false);
+    const masks=Object.fromEntries(spans.map((x,k)=>[x.key,{path:`/m${k}.avi`,in:x.srcStart}]));
+    const p=planRender(d,media,{'ga-1':'/g.webm'},{},masks);
+    expect(p.skipped).toEqual([]);
+    const ids=p.pictures.map(x=>x.itemId);
+    expect(ids.slice(ids.indexOf('g1'))).toEqual(['g1','g1.subject.a2','g1.subject.a1','g1.subject.a1']);
+    const a2=p.pictures.find(x=>x.itemId==='g1.subject.a2')!;
+    expect([a2.fs,a2.fe,a2.path,a2.zoom.length>0,a2.mask?.path]).toEqual([60,75,'/b',true,'/m2.avi']);
+    // Not marked: nothing changes.
+    expect(planRender(doc({graphics:[{id:'g1',assetId:'ga-1',start:0.5,end:2.5,owner:'agent'}]}),media,{'ga-1':'/g.webm'},{},masks).pictures.some(x=>x.mask)).toBe(false);
   });
   it('writes text and captions as ASS events on frame edges',()=>{
     const d=doc({
@@ -166,6 +184,29 @@ describe.skipIf(!hasFfmpeg)('renderEditDoc',()=>{
     expect(half(true)).toBeGreaterThan(240);
     expect(half(false)).toBeLessThan(80);
     expect(mean(await frame(out,74))).toBeLessThan(80);
+  },120_000);
+
+  it('puts the masked speaker over a behindSubject graphic, zoom and all; falls back to over',async()=>{
+    const webm=join(dir,'white.webm');
+    await ff(['-f','lavfi','-i',`color=c=white:s=${W}x${H}:r=30:d=2,format=yuva420p`,'-c:v','libvpx-vp9','-pix_fmt','yuva420p','-auto-alt-ref','0','-t','2',webm]);
+    // A stand-in for the model: the right half of the source frame is the subject.
+    const masker:SubjectMasker=async m=>{
+      await ff(['-f','lavfi','-i',`color=c=black:s=${W}x${H}:r=${m.fps}:d=${m.end-m.start},geq=lum='if(gt(X,W/2),255,0)':cb=128:cr=128`,'-c:v','mjpeg','-pix_fmt','yuvj420p',m.out]);
+      return true;
+    };
+    const d=doc({graphics:[{id:'g1',assetId:'ga-1',start:2.5,end:3.5,owner:'agent',behindSubject:true}]});
+    const half=(f:Uint8Array,left:boolean)=>{let s=0,n=0;for(let y=0;y<H;y++)for(let x=left?0:W/2+10;x<(left?W/2-10:W);x++){s+=f[y*W+x]!;n++;}return s/n;};
+    const out=join(dir,'behind.mp4');
+    const r=await renderEditDoc({doc:d,media,graphics:{'ga-1':webm},subjectMask:masker,out,work:join(dir,'work6'),chunkSeconds:1});
+    expect(r.skipped).toEqual([]);
+    const f=await frame(out,90);
+    // Left: the white graphic. Right: the dark speaker clip back on top (a sliver of its zoomed square falls here).
+    expect(half(f,true)).toBeGreaterThan(240);
+    expect(half(f,false)).toBeLessThan(80);
+    const plain=join(dir,'over.mp4');
+    const r2=await renderEditDoc({doc:d,media,graphics:{'ga-1':webm},subjectMask:async()=>false,out:plain,work:join(dir,'work7')});
+    expect(r2.skipped).toEqual([{itemId:'g1',reason:'subject-mask-missing'}]);
+    expect(half(await frame(plain,90),false)).toBeGreaterThan(240);
   },120_000);
 
   it('screen craft: a cropped region fills the frame, sped-up footage runs fast, the speaker sits in a corner',async()=>{

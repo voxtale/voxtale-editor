@@ -9,7 +9,7 @@ import { fpsSchema } from "./time";
 import { cssColor, editStyleSchema, fontWeight } from "./style";
 import { gradeSchema } from "./grade";
 
-export const EDITDOC_VERSION = 5 as const;
+export const EDITDOC_VERSION = 6 as const;
 
 const id = z.string().regex(/^[A-Za-z0-9_.:~-]{1,120}$/); // "~" marks suggestion ids ("a1~r4")
 const time = z.number().finite().nonnegative();
@@ -207,6 +207,8 @@ export const graphicItemSchema = z.object({
     assetRevision: z.number().int().nonnegative().default(0),
     placement: z.enum(GRAPHIC_PLACEMENTS).optional(),
   }).strict()).max(VARIANTS_MAX).optional(),
+  /** Drawn behind the speaker: the a-roll's subject (a person mask) goes back on top. Without a mask, drawn over as usual. */
+  behindSubject: z.boolean().optional(),
   ...pictureFade,
 }).strict();
 export const musicItemSchema = z.object({
@@ -466,13 +468,14 @@ function liftZoom(item: Raw, keys: V2Key[]): Raw | undefined {
  * Bring an older document up to EDITDOC_VERSION before parsing. v2 → v3: each
  * a-roll item's zoom keys become one item on the zoom track. v3 → v4: every
  * new field is optional, so only the number changes. Anything else passes
- * through for the schema to judge. v4 → v5: new fields are optional too.
+ * through for the schema to judge. v4 → v5 and v5 → v6 (graphics behindSubject):
+ * new fields are optional too.
  */
 export function upgradeEditDoc(input: unknown): unknown {
   const doc = input as Raw | null;
   if (!doc || typeof doc !== "object") return input;
   if (doc.version === 2) return upgradeEditDoc(upgradeV2(doc));
-  if (doc.version === 3 || doc.version === 4) return { ...doc, version: EDITDOC_VERSION };
+  if (doc.version === 3 || doc.version === 4 || doc.version === 5) return { ...doc, version: EDITDOC_VERSION };
   return input;
 }
 

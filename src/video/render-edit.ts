@@ -29,6 +29,11 @@ export interface RenderEditOptions {
   media:Record<string,string>;
   /** Graphic asset id → alpha WebM at canvas size. A graphic without one is left out and reported. */
   graphics?:Record<string,string>;
+  /**
+   * Writes a subject (person) mask video for source seconds [start, end) of a clip at `fps` to `out`; false when it
+   * cannot (no model). Graphics marked behindSubject need it; without it they are drawn over the speaker and reported.
+   */
+  subjectMask?:SubjectMasker;
   out:string;
   /** Scratch folder; emptied when the render ends. */
   work:string;
@@ -81,8 +86,9 @@ export interface RenderEditResult {
   loudness?:{before:LoudnessLevel;gainDb:number;after?:LoudnessLevel};
   /** Clips drawn through a colour grade (their 3D LUT). */
   graded?:string[];
-  skipped:{itemId:string;reason:'graphic-not-ready'}[];
+  skipped:{itemId:string;reason:'graphic-not-ready'|'subject-mask-missing'}[];
 }
+export type SubjectMasker=(o:{video:string;start:number;end:number;fps:number;out:string})=>Promise<boolean>;
 
 export class MissingMediaError extends Error {
   constructor(readonly clips:string[]) {super(`Missing media for ${clips.length} clip(s): ${clips.join(', ')}`);}
@@ -111,6 +117,8 @@ interface Picture {
   fx?:PictureFx[];
   /** .cube file of the clip's colour grade, applied to every frame. */
   lut?:string;
+  /** Alpha from this mask video (white = keep); its frame 0 shows source second `in`. The speaker drawn over a graphic. */
+  mask?:{path:string;in:number};
 }
 /** Fade to or from see-through (no colour) or a flat colour; slide across (fractions of the width); scale up or down; blur sideways. */
 export type PictureFx=
@@ -150,8 +158,41 @@ const frameAt=(t:number,fps:number)=>Math.ceil(t*fps-1e-6)||0;
 
 const TRACK_DRAW=['a-roll','b-roll','graphics'] as const;
 
+/** A piece of a-roll a behindSubject graphic covers, and the source seconds its mask must span. */
+/** A mask video whose frame 0 shows source second `in`. */
+export interface SubjectMask {path:string;in:number}
+export interface SubjectSpan {key:string;graphicId:string;arollId:string;clipId:string;start:number;end:number;srcStart:number;srcEnd:number}
+
+/**
+ * Where the speaker goes back over a graphic: each behindSubject graphic against each shown a-roll piece under it,
+ * less the time full-frame b-roll hides the speaker.
+ */
+export function subjectSpans(doc:EditDoc):SubjectSpan[] {
+  const cover=shown(doc.tracks['b-roll']).filter(b=>!b.pip&&b.opacity>=1).map(b=>[b.start,b.end] as const).sort((x,y)=>x[0]-y[0]);
+  const out:SubjectSpan[]=[];
+  for(const g of shown(doc.tracks.graphics)) {
+    if(!g.behindSubject)continue;
+    for(const a of shown(doc.tracks['a-roll'])) {
+      let s=Math.max(a.start,g.start);
+      const e=Math.min(a.end,g.end);
+      const pieces:[number,number][]=[];
+      for(const [b0,b1] of cover) {
+        if(b1<=s||b0>=e)continue;
+        if(b0>s)pieces.push([s,b0]);
+        s=Math.max(s,b1);
+      }
+      if(s<e)pieces.push([s,e]);
+      for(const [p0,p1] of pieces)if(p1-p0>1e-3)out.push({key:`${g.id}.${a.id}.${p0.toFixed(3)}`,graphicId:g.id,arollId:a.id,clipId:a.clipId,
+        start:p0,end:p1,srcStart:a.in+(p0-a.start),srcEnd:a.in+(p1-a.start)});
+    }
+  }
+  return out;
+}
+
 /** What to draw and play, bottom layer first. Throws MissingMediaError when a clip's file is not in `media`. */
-export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Record<string,string>={},luts:Record<string,string>={}):RenderPlan {
+export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Record<string,string>={},luts:Record<string,string>={},
+  /** SubjectSpan key → its mask video (subjectSpans). */
+  masks:Record<string,SubjectMask>={}):RenderPlan {
   const fps=doc.fps.num/doc.fps.den;
   const {width,height}=doc.canvas;
   const clips=new Map(doc.clips.map(c=>[c.id,c]));
@@ -164,6 +205,7 @@ export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Reco
   };
   const skipped:RenderPlan['skipped']=[];
   const pictures:Picture[]=[];
+  const behind:string[]=[];
   // Bottom first: a-roll, b-roll, graphics; within a track the last lane first.
   for(const kind of TRACK_DRAW) {
     const items=shown(doc.tracks[kind] as {id:string;status:string;start:number;end:number}[]);
@@ -177,6 +219,7 @@ export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Reco
         const path=graphics[g.assetId];
         if(!path) {skipped.push({itemId:g.id,reason:'graphic-not-ready'});continue;}
         pictures.push({itemId:g.id,path,kind:'graphic',fs,fe,start:g.start,in:0,fit:'contain',opacity:1,zoom:[]});
+        behind.push(g.id);
         continue;
       }
       const c=item as EditDoc['tracks']['a-roll'][number]|EditDoc['tracks']['b-roll'][number];
@@ -202,6 +245,18 @@ export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Reco
         pictures.push({itemId:`${b.id}.pip.${a.id}`,path:pathOf(a.clipId),kind:'video',fs,fe,start:s,in:a.in+(s-a.start),fit:'cover',opacity:1,zoom:[],box,...(luts[a.clipId]?{lut:luts[a.clipId]}:{})});
       }
     }
+  }
+
+  // Text behind the speaker: the a-roll under it again, cut out by its subject mask, on top of the graphic.
+  const spans=subjectSpans(doc).filter(x=>behind.includes(x.graphicId));
+  for(const x of spans) {
+    const base=pictures.find(p=>p.itemId===x.arollId&&p.kind==='video');
+    const mask=masks[x.key];
+    if(!mask||!base) {if(!skipped.some(k=>k.itemId===x.graphicId&&k.reason==='subject-mask-missing'))skipped.push({itemId:x.graphicId,reason:'subject-mask-missing'});continue;}
+    const fs=frameAt(x.start,fps),fe=frameAt(x.end,fps);
+    if(fe<=fs)continue;
+    const at=pictures.findIndex(p=>p.itemId===x.graphicId)+1;
+    pictures.splice(at,0,{...base,itemId:`${x.graphicId}.subject.${x.arollId}`,fs,fe,mask});
   }
 
   const {mix}=doc;
@@ -530,18 +585,26 @@ function videoChunkArgs(plan:RenderPlan,c0:number,c1:number,assFile:string,fonts
   const {width:W,height:H,rate,fps}=plan;
   const inputs:string[]=['-f','lavfi','-i',`color=c=black:s=${W}x${H}:r=${rate}`];
   const graph:string[]=[];
-  let last='0:v',n=0;
+  let last='0:v',n=0,input=0;
   for(const p of plan.pictures) {
     const a=Math.max(p.fs,c0),b=Math.min(p.fe,c1);
     if(b<=a)continue;
     const skip=Math.max(0,a/fps-p.start);
     const frames=b-a;
     const secs=num((frames+2)/fps);
-    n++;
+    n++;input++;
+    const src=input;
     if(p.kind==='image')inputs.push('-loop','1','-framerate',rate,'-t',secs,'-i',p.path);
     else if(p.kind==='graphic')inputs.push('-c:v','libvpx-vp9','-ss',num(skip),'-t',secs,'-i',p.path);
     else inputs.push('-ss',num(p.in+skip*(p.speed??1)),'-t',num((frames+2)/fps*(p.speed??1)),'-i',p.path);
-    graph.push(`[${n}:v]${pictureFilter(p,skip,frames,plan)},setpts=PTS+${a-c0}[p${n}]`);
+    if(p.mask) {
+      // The mask, sized to the source frame, becomes its alpha before any crop, scale or zoom: both move together.
+      inputs.push('-ss',num(Math.max(0,p.in+skip-p.mask.in)),'-t',secs,'-i',p.mask.path);
+      const m=++input;
+      graph.push(`[${src}:v]setpts=PTS-STARTPTS,fps=${rate}[s${n}]`,`[${m}:v]setpts=PTS-STARTPTS,fps=${rate},format=gray[k${n}]`,
+        `[k${n}][s${n}]scale2ref[kk${n}][ss${n}]`,`[ss${n}][kk${n}]alphamerge,${pictureFilter(p,skip,frames,plan)},setpts=PTS+${a-c0}[p${n}]`);
+    }
+    else graph.push(`[${src}:v]${pictureFilter(p,skip,frames,plan)},setpts=PTS+${a-c0}[p${n}]`);
     // A slide moves the picture across the frame over its window, smoothly in and out.
     const slide=(p.fx??[]).filter(x=>x.type==='slide').map(x=>{
       const q=`clip((t+${num(c0/fps)}-${num(x.t0)})/${num(Math.max(1e-3,x.t1-x.t0))},0,1)`;
@@ -650,6 +713,24 @@ export function loudnessReport(l:NonNullable<RenderEditResult['loudness']>,targe
 
 const quoteList=(p:string)=>`file '${p.replace(/'/g,`'\\''`)}'`;
 
+/** One mask per subject span the masker could make; none without a masker. */
+async function writeSubjectMasks(o:RenderEditOptions,media:Record<string,string>,dir:string):Promise<Record<string,SubjectMask>> {
+  const spans=subjectSpans(o.doc).filter(x=>o.graphics?.[o.doc.tracks.graphics.find(g=>g.id===x.graphicId)?.assetId??'']);
+  if(!spans.length||!o.subjectMask)return {};
+  await mkdir(dir,{recursive:true});
+  const clips=new Map(o.doc.clips.map(c=>[c.id,c]));
+  const fps=o.doc.fps.num/o.doc.fps.den,out:Record<string,SubjectMask>={};
+  for(const [k,x] of spans.entries()) {
+    const c=clips.get(x.clipId),video=c&&c.kind==='video'?media[c.hash]:undefined;
+    if(!video)continue;
+    const file=join(dir,`m${k}.avi`);
+    // Two frames of margin each side, as the chunk inputs read past their ends.
+    const start=Math.max(0,x.srcStart-2/fps);
+    if(await o.subjectMask({video,start,end:x.srcEnd+2/fps,fps,out:file}).catch(()=>false))out[x.key]={path:file,in:start};
+  }
+  return out;
+}
+
 export async function renderEditDoc(o:RenderEditOptions):Promise<RenderEditResult> {
   // ffmpeg-path.ts finds a libass build (env var, then ffmpeg-full on Mac).
   const ffmpeg=o.ffmpeg??ffmpegPath(),ffprobe=o.ffprobe??ffprobePath();
@@ -661,7 +742,8 @@ export async function renderEditDoc(o:RenderEditOptions):Promise<RenderEditResul
     // Library sound effects are made again from their name; graded clips get a .cube each.
     const library=await writeLibrary(join(o.work,'sfx'),o.doc.clips.filter(c=>!o.media[c.hash]).map(c=>c.hash));
     const luts=await writeLuts(o.doc,join(o.work,'luts'));
-    const plan=planRender(soft?{...o.doc,tracks:{...o.doc.tracks,captions:[]}}:o.doc,{...library,...o.media},o.graphics,luts);
+    const masks=await writeSubjectMasks(o,{...library,...o.media},join(o.work,'masks'));
+    const plan=planRender(soft?{...o.doc,tracks:{...o.doc.tracks,captions:[]}}:o.doc,{...library,...o.media},o.graphics,luts,masks);
     if(plan.frames<=0)throw new Error('Nothing on the timeline to render');
     const assFile=join(o.work,'text.ass');
     await writeFile(assFile,plan.ass);

@@ -2,6 +2,8 @@
 
 ``python -m voxtale_native faces`` reads {images_b64: [...]} on stdin and
 writes {faces: [...]} (largest face per still, or null) on stdout.
+``subject`` reads {video, out, start, end, fps} and writes a subject mask
+video to ``out`` (voxtale_native/subject.py).
 """
 
 from __future__ import annotations
@@ -17,7 +19,13 @@ def _faces(req: dict) -> dict:
     return {"faces": [largest_face(base64.b64decode(b)) for b in req["images_b64"]]}
 
 
-OPS = {"faces": _faces}
+def _subject(req: dict) -> dict:
+    from voxtale_native.subject import subject_mask_video
+
+    return subject_mask_video(req["video"], req["out"], float(req["start"]), float(req["end"]), float(req["fps"]))
+
+
+OPS = {"faces": _faces, "subject": _subject}
 
 
 def main(argv: list[str]) -> int:

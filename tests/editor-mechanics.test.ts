@@ -47,8 +47,12 @@ describe('EditDoc v4',()=>{
     const v3={...doc(),version:3};
     const up=upgradeEditDoc(v3) as EditDoc;
     expect(up.version).toBe(EDITDOC_VERSION);
-    expect(EDITDOC_VERSION).toBe(5);
+    expect(EDITDOC_VERSION).toBe(6);
     expect(parseEditDoc(v3).doc.tracks['a-roll']).toEqual(doc().tracks['a-roll']);
+  });
+  it('lifts a v5 doc by its number only (v6 adds graphics behindSubject)',()=>{
+    expect((upgradeEditDoc({...doc(),version:5}) as EditDoc).version).toBe(6);
+    expect(parseEditDoc({...doc(),version:5}).doc.tracks['a-roll']).toEqual(doc().tracks['a-roll']);
   });
 });
 

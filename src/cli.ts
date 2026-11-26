@@ -141,7 +141,8 @@ async function editDocCommand(command:string,path:string|undefined,values:Record
       for(const f of await readdir(values.graphics))if(f.endsWith('.webm'))graphics[f.slice(0,-5)]=resolve(values.graphics,f);
     }
     const {renderEditDoc}=await import('./video/render-edit');
-    const r=await renderEditDoc({doc,media,graphics,out:resolve(values.out),work,...(ffmpeg?{ffmpeg}:{}),progress:f=>console.error(`${Math.round(f*100)}%`)});
+    const {nativeSubjectMask}=await import('./native/bridge');
+    const r=await renderEditDoc({doc,media,graphics,out:resolve(values.out),work,subjectMask:m=>nativeSubjectMask(m,w=>console.error(w)),...(ffmpeg?{ffmpeg}:{}),progress:f=>console.error(`${Math.round(f*100)}%`)});
     console.log(JSON.stringify(r,null,2));return;
   }
   if(typeof values.a!=='string'||typeof values.b!=='string')throw new Error('--a and --b are required');
