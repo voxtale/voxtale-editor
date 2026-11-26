@@ -4,58 +4,8 @@
 // pro-motion). Here they serve GSAP compositions under either renderer:
 // MOTION_KIT_JS goes into every composition as window.kit, right after GSAP.
 
-/** Cubic-bezier curves (x1, y1, x2, y2), as in CSS. Typical durations in the skill. */
-export const CURVES={
-  glide:[0.333,0,0,1], // soft start, long finish: entrances, a rising title, cooling down
-  flowIn:[0.001,0.66,0.16,0.98], // arrives at full speed (a smear on frame 1), then settles for a long time
-  flowInBig:[0.001,0.87,0.16,0.974], // same, harder: an end card arriving from the back
-  flowOut:[1,0,0.999,0.01], // holds still, then leaves at once (74% of the travel on the last frame)
-  swing:[0.86,0.01,0.15,0.99], // lingers, rushes, lingers: pans, pushes, big slides
-  land:[0.001,1,0,1], // arrives fast and stops sharply but softly
-  flyBy:[0.001,0.506,0.999,0], // crosses the frame: fast, slow, fast
-  press:[0.333,0,0.667,1], // click: 4 frames in + 4 back
-  scroll:[0.6,0,0.3,1],
-  fadeSlow:[0.167,0,0.833,1],
-  endPush:[1,0,0.075,1], // slow push on the end card
-  cursor:[0.36,0,0.03,0.97], // a cursor gliding to its target
-  shake:[0.74,0,0.18,1], // impact shake
-  moderate:[0.2,0.6,0.35,1],
-} as const satisfies Record<string,readonly [number,number,number,number]>;
-export type CurveName=keyof typeof CURVES;
-
-/**
- * SNAP: from `from` to `to` in `frames` frames in a straight line, then the
- * bounce (overshoots ~14%, settles in ~1 s), at `frame` frames since the snap
- * began. Only for small interface pieces that appear in place (tick, dot,
- * badge, button, list marker, bar): never text, a card, a banner or a window.
- * `amp` by size: 0.035 small piece, 0.02 a bit bigger (button).
- */
-export function snap(frame:number,fps:number,from:number,to:number,{frames=4,amp=0.035}={}):number {
-  if(frame<=0)return from;
-  if(frame<frames)return from+((to-from)*frame)/frames;
-  // Bounce computed at 25 fps: the same overshoot at 24, 25 or 30 fps.
-  const t=(frame-frames)/fps,speed=(to-from)/(frames/25);
-  const fade=(1-Math.min(1,t/3))**2; // the bounce dies within 3 s
-  return to+(speed*amp*Math.sin(1.8*t*2*Math.PI))/Math.exp(3*t)*fade;
-}
-
-/** Gaussian blur (std dev, px) that looks like a smear `length` px long: that of a box blur of the same length. */
-export const smearStd=(length:number)=>Math.abs(length)/Math.sqrt(12);
-
-/** Delay (frames) of item `i` of `n` in a staggered entrance: `each` frames per rank, counted from the start, end, centre, edges or a given rank. */
-export function stagger(i:number,n:number,{each,from='start'}:{each:number;from?:'start'|'end'|'center'|'edges'|number}):number {
-  const mid=(n-1)/2;
-  const rank=from==='start'?i:from==='end'?n-1-i:from==='center'?Math.abs(i-mid)
-    :from==='edges'?mid-Math.abs(i-mid):Math.abs(i-from);
-  return rank*each;
-}
-
-/** A counter that settles: smaller and smaller steps towards the end, rounded to `decimals`, exactly `to` at frame `frames`. */
-export function countSteps(frame:number,frames:number,from:number,to:number,decimals=0):number {
-  const t=Math.min(1,Math.max(0,frame/Math.max(1,frames)));
-  const k=10**decimals;
-  return Math.round((from+(to-from)*(1-(1-t)**3))*k)/k;
-}
+export {CURVES,countSteps,smearStd,snap,stagger,type CurveName} from './sandbox/remotion/scenes/motion';
+import {CURVES,countSteps,snap,stagger} from './sandbox/remotion/scenes/motion';
 
 /** Frames per second the kit counts in (both renderers render at 30). */
 export const KIT_FPS=30;

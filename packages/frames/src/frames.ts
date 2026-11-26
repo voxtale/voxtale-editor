@@ -47,6 +47,11 @@ export interface GraphicJob {
   stills:number[];
   /** Source frame the stills sit over. */
   backdrop:FramePoint;
+  /**
+   * A native Remotion scene instead of the composition: a built-in by name, or
+   * `custom` with the agent's TSX in `source`. Needs the Remotion renderer.
+   */
+  scene?:{name:string;props:Record<string,unknown>;source?:string};
 }
 
 export interface GraphicResult {
@@ -203,6 +208,10 @@ export async function renderGraphic(dir:string,job:GraphicJob,backdrop:string,re
   await mkdir(inDir,{recursive:true});await mkdir(outDir,{recursive:true});
   await writeFile(join(inDir,'index.html'),job.html);
   await writeFile(join(inDir,'kit.css'),job.kitCss);
+  if(job.scene) {
+    await writeFile(join(inDir,'scene.json'),JSON.stringify({scene:job.scene.name,props:job.scene.props}));
+    if(job.scene.source!==undefined)await writeFile(join(inDir,'scene.tsx'),job.scene.source);
+  }
   let r:Awaited<ReturnType<HtmlRenderer>>;
   try {r=await render({dir:inDir,width:job.width,height:job.height,seconds:job.seconds});}
   catch(e) {r={ok:false,report:`render failed: ${tail(e instanceof Error?e.message:String(e))}`};}

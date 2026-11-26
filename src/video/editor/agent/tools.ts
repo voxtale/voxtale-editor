@@ -3,6 +3,7 @@
 // <workspace>/edit.json (the EditDoc) after every change.
 import {withMotionKit} from './motion';
 import {resolvePlace,templateHtml,templateSchema} from './templates';
+import {sceneTools,type SceneJob} from './scene-tools';
 import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {z} from 'zod/v4';
@@ -50,6 +51,8 @@ export interface Workspace {
   captionLookKept?:boolean;
   /** Graphic id → rendered alpha WebM, and where it sits on screen. */
   graphics:Record<string,{webm:string;seconds:number;place:GraphicItem['placement']}>;
+  /** Scenes the agent wrote (write_scene): name → TSX source, gated and type-checked. */
+  scenes?:Record<string,string>;
   doc?:EditDoc;
   finished?:{summary:string;problems:string[]};
   graphicsEnabled:boolean;
@@ -318,9 +321,9 @@ const ITEM_PLACE={full:'full',left:'left',right:'right',lower:'bottom',top:'top'
 export function editorTools(ws:Workspace):ToolDef<any>[] {
   // Graphics render at the canvas size, the speaker's frame; another clip's size gets stretched onto it.
   const canvas=()=>(ws.job.clips.find(speaking)??ws.job.clips[0]!).ref;
-  async function renderInto(id:string,html:string,seconds:number,c:Job['clips'][number],t:number,face:Face|undefined,stills:number[],place:GraphicItem['placement']) {
+  async function renderInto(id:string,html:string,seconds:number,c:Job['clips'][number],t:number,face:Face|undefined,stills:number[],place:GraphicItem['placement'],scene?:SceneJob) {
     const ref=canvas(),width=ref.width??1920;
-    const r=await ws.frames.graphic({id,html:withMotionKit(html),kitCss:kitCss(width,face),width,height:ref.height??1080,seconds,stills,backdrop:{clip:c.ref.hash,t:t+0.3}});
+    const r=await ws.frames.graphic({id,html:withMotionKit(html),kitCss:kitCss(width,face),width,height:ref.height??1080,seconds,stills,backdrop:{clip:c.ref.hash,t:t+0.3},...(scene?{scene}:{})});
     if(r.ok&&r.webm){ws.graphics[id]={webm:r.webm,seconds,place};await save(ws);}
     else delete ws.graphics[id];
     return {text:`${r.ok?'rendered':'FAILED'} ${id}\n${r.report}${r.ok?`\nstills at ${stills.map(x=>x.toFixed(1)).join(', ')}s, over the speaker`:''}`,
@@ -559,11 +562,18 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
         // Own HTML: code cannot tell where it draws, so the overlay is the frame.
         return renderInto(id,html,seconds,c,w.start,face,stills.filter(t=>t<seconds),'full');
       }}),
+    ...sceneTools(ws,async(id,scene,seconds,anchor,stills)=>{
+      const c=clipOf(ws.job,anchor.clip);
+      const w=c.words.find(x=>x.id===anchor.word);
+      if(!w)throw new Error(`no word ${anchor.word} in ${anchor.clip}`);
+      // The html is unused for a scene; it keeps the in/ folder the same shape.
+      return renderInto(id,'<!doctype html><html><head></head><body></body></html>',seconds,c,w.start,faceAt(c,w.start),stills,'full',scene);
+    }),
     defineTool({name:'place_graphic',description:'Put a rendered graphic on the timeline, starting on a source word (it follows that word through recuts; dropped if the word is cut). Same id again moves it.',
       input:{id:z.string(),clip:z.string(),word:z.number().int(),seconds:z.number().min(0.5).max(15),
         reason:z.string().max(200),fade:fadeField},
       run:async(p)=>{
-        if(!ws.graphics[p.id])throw new Error(`graphic ${p.id} has not rendered; call make_graphic or render_graphic first`);
+        if(!ws.graphics[p.id])throw new Error(`graphic ${p.id} has not rendered; call make_graphic, render_graphic or render_scene first`);
         if(!ws.segments.length)throw new Error('set a cut first');
         const had=ws.placements.find(x=>x.id===p.id);
         await change(ws,()=>{ws.placements=[...ws.placements.filter(x=>x.id!==p.id),{...p,...(had?.variants?{variants:had.variants}:{}),...(had?.shows?{shows:had.shows}:{})}];},{named:[`g-${p.id}`]});
@@ -663,7 +673,7 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
         let next={...g,variants:[...(g.variants??[])]};
         if(add) {
           if(!add.graphic)throw new Error('a graphic variant needs graphic: the id of another rendered graphic');
-          if(!ws.graphics[add.graphic])throw new Error(`graphic ${add.graphic} has not rendered; call make_graphic or render_graphic first`);
+          if(!ws.graphics[add.graphic])throw new Error(`graphic ${add.graphic} has not rendered; call make_graphic, render_graphic or render_scene first`);
           if(next.variants.length>=VARIANTS_MAX)throw new Error(`${id} has ${VARIANTS_MAX} variants; choose one or leave it`);
           next.variants.push({id:add.graphic});
         }
