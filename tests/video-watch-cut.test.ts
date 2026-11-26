@@ -81,6 +81,20 @@ describe('watch_cut sheet (ffmpeg)',()=>{
     expect(at(cell+4+(box.x+box.width/2)*k,(box.y+box.height/2)*k)).toBeLessThan(40);
   },60_000);
 
+  test('text behind the speaker: the cut-out speaker goes back over the graphic',async()=>{
+    const webm=join(dir,'g.webm');
+    await ff(['-f','lavfi','-i',`color=c=white:s=${W}x${H}:r=30:d=1`,'-c:v','libvpx-vp9','-pix_fmt','yuva420p',webm]);
+    const shot={t:1,layers:[{clip:hash('a'),t:1,fit:'cover' as const}],graphics:[{webm,t:0.5,behind:true}],notes:[] as string[]};
+    // Mask: the left half of the still is the speaker.
+    const cutout=async(still:string,out:string)=>{await ff(['-i',still,'-vf','geq=lum=if(lt(X\\,W/2)\\,255\\,0),format=gray',out]);return true;};
+    const sheet=await drawPreview({shots:[shot],canvas:{width:W,height:H},frames:localFrames({sources,dir:join(dir,'frames2')}),dir:join(dir,'preview2'),ff,cutout});
+    const {px,w,h}=await grey(sheet);
+    const at=(x:number,y:number)=>px[Math.round(y)*w+Math.round(x)]!;
+    expect(at(w*0.25,h/2)).toBeLessThan(40);
+    expect(at(w*0.75,h/2)).toBeGreaterThan(215);
+    expect(shot.notes).toContain('speaker cut out over the graphic');
+  },60_000);
+
   test('finish sends an unwatched cut back once; a full watch clears it',async()=>{
     const ws:Workspace={dir:join(dir,'ws'),job,segments:[],placements:[],captions:[],zooms:[],broll:[],text:[],chapters:[],graphics:{},graphicsEnabled:false,
       frames:localFrames({sources,dir:join(dir,'frames2')})};

@@ -19,3 +19,4 @@ bench/**/*.log
 
 # Subject mask model: tools/fetch-subject-model.sh
 models/u2netp.onnx
+models/luts/

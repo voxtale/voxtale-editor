@@ -2,6 +2,7 @@
 // Moved from the agent-editor spike (experiments/agent-editor).
 // The agent picks words; code snaps, pads and validates (Timeline-Bench: never let the
 // agent's own "done" be the judge).
+import {placeLogos,type LogoPlacement} from './logo';
 import {planZoom,reframeFor,type EyesAt} from '../../zoom';
 import type {StoryClip} from '../../story-edit';
 import {planAudio,type MusicCues,type SfxHit} from '../../audio';
@@ -138,6 +139,8 @@ export interface Overlays {wordFixes?:WordFix[];graphics?:GraphicPlacement[];cap
   multicam?:Multicam;
   /** Eyes at a source time, for zoom's eye match; the index's face stands in without it. */
   eyesAt?:EyesAt;
+  /** The brand logo (place_logo): its image clip and where and when it shows. */
+  logo?:{ref:ClipRef;items:LogoPlacement[]};
   /**
    * Where a word is heard to start ('in') or end ('out'), from the clip's sound; never past `limit`.
    * `other` is the word's other end: with it the edge may move inward, off a breath or a pause the
@@ -326,7 +329,8 @@ export function buildCut(job:Job,segments:Segment[],o:Overlays={}):EditDoc {
   // Library sounds the agent's hits use join the clips; grades ride on their clips.
   const lib=SFX_SOUND_IDS.filter(n=>o.sfx?.some(h=>h.clipId===libraryClip(n).id)&&!job.clips.some(c=>c.ref.id===libraryClip(n).id)).map((n:SfxSound)=>libraryClip(n));
   const graded=(r:ClipRef):ClipRef=>{const g=o.grades?.[r.id];return {...r,...o.clipSettings?.[r.id],...(g?{grade:g}:{})};};
-  let doc=newEditDoc({id:job.id,name:job.name,clips:[...job.clips.map(c=>graded(c.ref)),...lib],fps:main.fps,style:job.style,
+  const logoRef=o.logo?.items.length&&!job.clips.some(c=>c.ref.id===o.logo!.ref.id)?[o.logo.ref]:[];
+  let doc=newEditDoc({id:job.id,name:job.name,clips:[...job.clips.map(c=>graded(c.ref)),...lib,...logoRef],fps:main.fps,style:job.style,
     canvas:{width:main.width??1920,height:main.height??1080}});
   if(o.wordFixes?.length)doc={...doc,wordFixes:o.wordFixes};
   const lay=(items:typeof raw):EditDoc=>{
@@ -377,6 +381,7 @@ export function buildCut(job:Job,segments:Segment[],o:Overlays={}):EditDoc {
   // Audio as core's audio stage does it: the creator's music under the video, effects on what appears.
   const audio=planAudio(doc,musicCues(job,doc,o.music),o.sfx&&sfxHits(job,doc,o.sfx));
   doc={...doc,tracks:{...doc.tracks,music:audio.music,sfx:audio.sfx},mix:{...doc.mix,...audio.mix}};
+  if(o.logo?.items.length)doc={...doc,logos:placeLogos(job,doc,o.logo.ref,o.logo.items)};
   return parseEditDoc(applyMulticam(doc,job,o.multicam)).doc;
 }
 

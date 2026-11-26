@@ -120,6 +120,8 @@ interface Picture {
   lut?:string;
   /** Alpha from this mask video (white = keep); its frame 0 shows source second `in`. The speaker drawn over a graphic. */
   mask?:{path:string;in:number};
+  /** The brand logo: scaled to box.width, its own shape and see-through kept, no border, top-left at box.x,box.y. */
+  logo?:true;
 }
 /** Fade to or from see-through (no colour) or a flat colour; slide across (fractions of the width); scale up or down; blur sideways. */
 export type PictureFx=
@@ -277,6 +279,17 @@ export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Reco
     const at=pictures.findIndex(p=>p.itemId===x.graphicId)+1;
     pictures.splice(at,0,{...base,itemId:`${x.graphicId}.subject.${x.arollId}`,fs,fe,mask});
   }
+
+  // The brand logo, above everything drawn so far; captions and text come later, on top.
+  const logos=doc.logos.filter(l=>clips.get(l.clipId)?.kind==='image');
+  for(const l of logos) {
+    const fs=frameAt(l.start,fps),fe=frameAt(l.end,fps);
+    if(fe<=fs)continue;
+    const w=Math.max(2,Math.round(l.w*width/2)*2);
+    pictures.push({itemId:l.id,path:pathOf(l.clipId),kind:'image',fs,fe,start:l.start,in:0,fit:'contain',opacity:l.opacity,zoom:[],logo:true,
+      box:{x:Math.round(l.x*width),y:Math.round(l.y*height),width:w,height:w}});
+  }
+  applyFades(logos,pictures);
 
   const {mix}=doc;
   const speech=mixSpeech(doc);
@@ -551,7 +564,8 @@ function pictureFilter(p:Picture,skip:number,frames:number,plan:RenderPlan):stri
   const {width:W,height:H,rate}=plan;
   const f=[p.speed?`setpts=(PTS-STARTPTS)/${num(p.speed)}`:`setpts=PTS-STARTPTS`,`fps=${rate}`,`trim=end_frame=${frames}`];
   if(p.crop)f.push(`crop=w='2*trunc(iw*${num(p.crop.w)}/2)':h='2*trunc(ih*${num(p.crop.h)}/2)':x='iw*${num(p.crop.x)}':y='ih*${num(p.crop.y)}'`);
-  if(p.box)f.push(`scale=${p.box.width}:${p.box.height}:force_original_aspect_ratio=increase`,`crop=${p.box.width}:${p.box.height}`,
+  if(p.logo&&p.box)f.push(`scale=${p.box.width}:-2`);
+  else if(p.box)f.push(`scale=${p.box.width}:${p.box.height}:force_original_aspect_ratio=increase`,`crop=${p.box.width}:${p.box.height}`,
     `drawbox=c=white@0.9:t=${Math.max(2,Math.round(p.box.width/160))}`);
   else if(p.fit==='cover')f.push(`scale=${W}:${H}:force_original_aspect_ratio=increase`,`crop=${W}:${H}`);
   else f.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease`);

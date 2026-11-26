@@ -84,3 +84,14 @@ def subject_mask_video(video: str, out: str, start: float, end: float, fps: floa
     finally:
         cap.release()
     return {"out": out, "frames": count, "width": width, "height": height}
+
+
+def subject_mask_still(image: str, out: str) -> dict:
+    """Mask for one still (the agent's preview frames): greyscale PNG at its size, white = subject."""
+    _net()
+    bgr = cv2.imread(image, cv2.IMREAD_COLOR)
+    if bgr is None:
+        raise ValueError(f"cannot read {image}")
+    if not cv2.imwrite(out, subject_map(bgr)):
+        raise ValueError(f"cannot write {out}")
+    return {"out": out, "width": int(bgr.shape[1]), "height": int(bgr.shape[0])}

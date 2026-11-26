@@ -168,6 +168,13 @@ export function checkEditDoc(doc: EditDoc): DocIssue[] {
   // Sync groups: members exist, one group per clip; a piece's angle, mic and
   // companions must share its clip's group, and a mic clip must have sound.
   for (const g of groupIssues(doc)) err(g.path, g.message);
+  doc.logos.forEach((l, i) => {
+    const at = `logos.${i}`, clip = clips.get(l.clipId);
+    if (ids.has(l.id)) err(`${at}.id`, `Duplicate item id ${l.id}`);
+    ids.add(l.id);
+    if (!clip || clip.kind !== "image") err(`${at}.clipId`, `Logo needs an image clip, not ${clip ? clip.kind : `unknown ${l.clipId}`}`);
+    if (l.x + l.w > 1 + 1e-6) err(`${at}.w`, "Logo reaches past the right edge");
+  });
   doc.tracks["a-roll"].forEach((item, i) => {
     const at = `tracks.a-roll.${i}`, g = groupOf(doc.groups, item.clipId);
     const same = (id: string) => !!g && g.members.some(m => m.clipId === id);

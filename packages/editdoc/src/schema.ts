@@ -12,7 +12,7 @@ import { fpsSchema } from "./time";
 import { cssColor, editStyleSchema, fontWeight } from "./style";
 import { gradeSchema } from "./grade";
 
-export const EDITDOC_VERSION = 6 as const;
+export const EDITDOC_VERSION = 7 as const;
 
 const id = z.string().regex(/^[A-Za-z0-9_.:~-]{1,120}$/); // "~" marks suggestion ids ("a1~r4")
 const time = z.number().finite().nonnegative();
@@ -464,6 +464,26 @@ export const syncGroupSchema = z.object({
 }).strict();
 export type SyncGroup = z.infer<typeof syncGroupSchema>;
 
+/**
+ * The brand logo over the cut (bd voxtale-editor-jo6.1): an image clip (role
+ * "logo") drawn from `start` to `end` of the output, top-left corner at x,y and
+ * w wide, all fractions of the canvas; its height follows the image's shape.
+ * Drawn above graphics, below captions; transparency in the file is kept.
+ */
+export const logoItemSchema = z.object({
+  id,
+  clipId: id,
+  start: time,
+  end: time,
+  owner: z.enum(["agent", "creator"]),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  w: z.number().min(0.02).max(1),
+  opacity: z.number().min(0.05).max(1).default(1),
+  ...pictureFade,
+}).strict().refine(l => l.end > l.start, "logo ends after it starts");
+export type LogoItem = z.infer<typeof logoItemSchema>;
+
 export const editDocSchema = z.object({
   version: z.literal(EDITDOC_VERSION),
   id,
@@ -490,6 +510,8 @@ export const editDocSchema = z.object({
   declinedText: z.array(z.string().min(1).max(160)).max(500).default([]),
   /** Caption word fixes, shared by every caption from their clip. */
   wordFixes: z.array(wordFixSchema).max(2000).default([]),
+  /** Brand logo placements (v7). */
+  logos: z.array(logoItemSchema).max(50).default([]),
   editorExtras: z.unknown().optional(),   // desktop editor fields we do not model; kept as-is
 }).strict();
 export type EditDoc = z.infer<typeof editDocSchema>;
@@ -535,14 +557,14 @@ function liftZoom(item: Raw, keys: V2Key[]): Raw | undefined {
  * Bring an older document up to EDITDOC_VERSION before parsing. v2 → v3: each
  * a-roll item's zoom keys become one item on the zoom track. v3 → v4: every
  * new field is optional, so only the number changes. Anything else passes
- * through for the schema to judge. v4 → v5 and v5 → v6: new fields are
- * optional (groups, angles, avOffset, graphics behindSubject).
+ * through for the schema to judge. v4 → v5, v5 → v6 and v6 → v7: new fields
+ * are optional (groups, angles, avOffset, graphics behindSubject; v7 logos).
  */
 export function upgradeEditDoc(input: unknown): unknown {
   const doc = input as Raw | null;
   if (!doc || typeof doc !== "object") return input;
   if (doc.version === 2) return upgradeEditDoc(upgradeV2(doc));
-  if (doc.version === 3 || doc.version === 4 || doc.version === 5) return { ...doc, version: EDITDOC_VERSION };
+  if (doc.version === 3 || doc.version === 4 || doc.version === 5 || doc.version === 6) return { ...doc, version: EDITDOC_VERSION };
   return input;
 }
 
