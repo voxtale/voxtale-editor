@@ -9,7 +9,6 @@ import {styleOf,type Job} from '../src/video/editor/agent/cut';
 import {mcpHandler} from '../src/video/editor/agent/mcp-protocol';
 import {taskPrompt} from '../src/video/editor/agent/plan';
 import {localEditorServer} from '../src/video/editor/local-mcp/server';
-import {STYLE_SKILL_TEXT} from '../src/video/editor/styles/agent-text';
 import {brandCss,brandKit,graphicsBrand} from '../src/video/editor/styles/brand';
 import {addFile,addLearned,createStyle,dropLearned,learnedRules,listStyles,readStyle,rulesBody,slugOf,withMeasuredSection} from '../src/video/editor/styles/folder';
 import {learnStyle,sidecarWords} from '../src/video/editor/styles/learn';
@@ -215,8 +214,5 @@ describe('learn and use a style',()=>{
     expect((await req('decide_rule',{id,decision:'edit',text:'Open on the strongest line of the video'})).content[0].text).toContain('[accepted]');
     expect((await req('style',{name:'talks'})).content[0].text).toContain('- Open on the strongest line of the video _(added');
     expect((await req('use_style',{name:'talks'})).isError).toBe(true);  // no edit open
-  });
-  test('the skill text for the coordinator names every style tool',()=>{
-    for(const t of ['styles','use_style','learn_style','create_style','add_style_file','propose_rule','decide_rule'])expect(STYLE_SKILL_TEXT).toContain(t);
   });
 });

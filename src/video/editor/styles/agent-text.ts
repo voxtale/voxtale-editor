@@ -1,6 +1,5 @@
-// Agent text for styles, NOT yet in any skill version. The coordinator folds
-// it into the next skill version (prompt registry, append-only) or the local
-// editor's guide. Nothing reads it yet: tool descriptions carry the flow alone.
+// Styles: a section of skill v28 (../agent/skill.ts), which also carries the
+// standing rules (now kept per style). Change it by appending a skill version.
 export const STYLE_SKILL_TEXT=`## Styles
 
 A style is a folder the creator owns: rules.md (how they edit, in their words),
@@ -24,12 +23,7 @@ come in the brief.
    timing.
 3. Look at the contact sheets (hook-*, cuts-*, text-*): Z+ marks a punch-in
    zoom, J a jump cut, B a blur. Say what you see in a few lines.
-4. Write the rules the creator agrees with into rules.md, in plain words
-   (captions, zooms, cards, music). The numbers are already there.
-
-### Rules
-When the creator asks for something to last ("always", "from now on", "in
-every video"): do it in this edit, then propose_rule once. Show the rule in a
-short block, word for word, and ask: keep it, change the wording, or drop it.
-decide_rule with their answer (accept, edit with their words, refuse). Never
-decide for them. retire takes a rule out when they no longer want it.`;
+4. Name the rules you see (captions, zooms, cards, music). Each one the
+   creator agrees with goes into rules.md through propose_rule and
+   decide_rule. The numbers are already there.
+`;

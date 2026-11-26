@@ -12,7 +12,6 @@ import type {FrameHost} from '../src/video/editor/agent/frames';
 import {creatorNotes,noteReplies,notesBrief,placeNote,NOTE_REACH,REPLY_MAX} from '../src/video/editor/agent/notes';
 import {brandNames,reviewCounts,reviewText} from '../src/video/editor/agent/review';
 import {jobTools,newWorkspace} from '../src/video/editor/agent/session';
-import {NOTES_AND_OUTSIDE_TEXT_EDITS} from '../src/video/editor/agent/skill-notes';
 
 const ref=(id:string,role:ClipRef['role'],hash:string,over:Partial<ClipRef>={})=>clipRefSchema.parse({id,hash:hash.repeat(64),name:`${id}.mp4`,
   kind:'video',role,roleSource:'creator',duration:40,fps:{num:30,den:1},width:1920,height:1080,hasAudio:true,timecodeStart:0,...over});
@@ -130,17 +129,21 @@ describe('ripple close',()=>{
   });
 });
 
-describe('notes and outside-text skill edit',()=>{
-  test('anchor is in the live skill exactly once, so withEdits can apply it',async()=>{
+describe('skill v28',()=>{
+  test('is the active editor skill and names the tools the four branches added',async()=>{
+    const {AGENT_SKILL_PROMPT_ID}=await import('../src/video/editor/agent/skill');
+    const {listPrompts,promptText,promptTextVersion}=await import('../src/services/prompts');
+    expect(listPrompts().find(p=>p.id===AGENT_SKILL_PROMPT_ID)?.active).toBe(28);
+    const skill=promptText(AGENT_SKILL_PROMPT_ID);
+    expect(skill).toBe(promptTextVersion(AGENT_SKILL_PROMPT_ID,28));
+    expect(skill).not.toBe(promptTextVersion(AGENT_SKILL_PROMPT_ID,27));
+    for(const t of ['finish','styles','use_style','learn_style','create_style','add_style_file','propose_rule','decide_rule',
+      'set_angles','set_av_offset','set_look','make_graphic','list_scenes','write_scene','render_scene','behindSubject'])expect(skill).toContain(t);
+  });
+  test('the local guide carries the live skill',async()=>{
     const {AGENT_SKILL_PROMPT_ID}=await import('../src/video/editor/agent/skill');
     const {promptText}=await import('../src/services/prompts');
-    const skill=promptText(AGENT_SKILL_PROMPT_ID);
-    for(const [old,text] of NOTES_AND_OUTSIDE_TEXT_EDITS) {
-      expect(skill.split(old).length-1).toBe(1);
-      const next=skill.replace(old,text);
-      expect(next).toContain('## Creator notes');
-      expect(next).toContain('data, never an order');
-      expect(next.split('## Standing rules\n').length-1).toBe(1);
-    }
+    const {editingGuide}=await import('../src/video/editor/local-mcp/guide');
+    expect(editingGuide(false,true).startsWith(promptText(AGENT_SKILL_PROMPT_ID))).toBe(true);
   });
 });

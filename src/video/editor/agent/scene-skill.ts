@@ -1,18 +1,13 @@
-// Agent text for native scenes, papercraft and pixel art. NOT a registered
-// skill version: several threads change the skill at once, so the
-// coordinator folds this into the next SKILL version at merge.
+// Agent text for native scenes, papercraft, pixel art and text behind the
+// speaker: sections of skill v28 (./skill.ts). The tsx examples are checked
+// by the scene gate in tests.
 // (translated, adapted to write_scene/render_scene; REDACTED-only parts dropped:
 // reference/ guides, sfx recipes, stills.ts, styles/ paths, the inspector)
 
-/** Scenes in general: when to use which graphics tool, and the scene file shape. */
+/** Scenes in general: the scene file shape (which tool to use is in the skill's Graphics process). */
 export const SCENES_SKILL_TEXT = `## Native scenes (Remotion)
 
-Three ways to make a graphic, cheapest first:
-- make_graphic: a designed template (title card, lower third…) filled from its schema. Use it when one fits.
-- render_scene with a built-in (list_scenes): Title, LowerThird, Hook, Annotate, Sparkles, ProgressBar, Rec, WordStack, Flash. Pass only the props you change.
-- write_scene, then render_scene: your own scene, when no template or built-in says it. render_graphic (HTML/GSAP) still works.
-
-A scene file:
+\`write_scene\` then \`render_scene\`: your own scene. A scene file:
 \`\`\`tsx
 import {AbsoluteFill, interpolate, useCurrentFrame, curves, clamp, z, color, num} from './kit';
 import type {SceneBase} from './types';
@@ -39,7 +34,7 @@ A papercraft scene is a photographed cardboard model: printed, cut cards unfold 
 overshoot a little and settle; light comes from one side, soft shadows take the world's colour; a long lens looks down on the
 model, a sharp band in the middle, blur above and below. Built on the papercraft lib (github.com/xikhar/papercraft, MIT).
 
-### The twelve laws
+### The laws
 1. Everything is a sheet with a thickness: cut, fold, stack, slot; never a sculpted volume. Round upright things (trees, posts, tents) = two cards slotted in a cross; low things = one card facing the camera.
 2. Matte, no gloss.
 3. One key light from the side, a little toward the camera; soft shadows in the world's colour (amber by day, lilac on snow, night blue), never grey or black; every piece touches the ground.
@@ -50,8 +45,7 @@ model, a sharp band in the middle, blur above and below. Built on the papercraft
 8. Dense and readable: a real model world (groups of 4 to 8 different pieces, at most 3 alike in view), not three props on a plain.
 9. What you cross, pass under or enter is built (bridge, stairs, folded house), never a standing card.
 10. Paper moves by turning on its folds: it rises fast, overshoots 8-15% with 2 or 3 quivers, settles in 1 s; nothing grows, stretches or fades in.
-11. (Sound: none here.)
-12. The world lives with its own things: 3 to 5 kinds (leaves, snow, birds, smoke, cloud shadows, animals), small and slow.
+11. The world lives with its own things: 3 to 5 kinds (leaves, snow, birds, smoke, cloud shadows, animals), small and slow.
 
 ### The scene
 \`\`\`tsx
@@ -188,7 +182,7 @@ For each scene: one at the arrival, one holding, one at the text exit.
 - Text touches neither the subject nor the app-UI zones.`;
 
 /** Text behind the speaker (place_graphic behindSubject). */
-export const BEHIND_SUBJECT_SKILL_TEXT = `## Text behind the speaker
+export const BEHIND_SUBJECT_SKILL_TEXT = `### Text behind the speaker
 - place_graphic with behindSubject: true cuts the speaker out at export and draws them over the graphic: a big word that sits behind the head.
 - Use it on a full-frame graphic that is see-through around its text, with the text large and partly behind the speaker, never so far behind that the word stops reading. Once or twice a video, on a line that matters.
 - Not over b-roll (the speaker is not on screen there) or a pip shot.

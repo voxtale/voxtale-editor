@@ -4,6 +4,10 @@
 // version is the one before it plus a list of edits, so every number keeps
 // the text artifacts stamped with it.
 import {registerPrompt} from '../../../services/prompts';
+import {LOG_COLOUR_SKILL_TEXT,MULTICAM_SKILL_TEXT} from './media-skill-text';
+import {BEHIND_SUBJECT_SKILL_TEXT,PAPERCRAFT_SKILL_TEXT,PIXEL_SKILL_TEXT,SCENES_SKILL_TEXT} from './scene-skill';
+import {NOTES_SKILL_TEXT} from './skill-notes';
+import {STYLE_SKILL_TEXT} from '../styles/agent-text';
 
 const SKILL_V20=`# VoxTale editor
 
@@ -958,4 +962,86 @@ under both. Remotion runs no lint: the stills are your check.
   .to('#panel',{opacity:0,x:40,duration:.5,ease:kit.curves.flowOut},5.5);`],
 ];
 
-export const AGENT_SKILL_PROMPT_ID=registerPrompt('video.agent-editor',{20:SKILL_V20,21:SKILL_V21,22:SKILL_V22,23:withMechanics(SKILL_V22),24:SKILL_V24,25:SKILL_V25,26:withEdits(SKILL_V25,FINISH_TOOLS_V26),27:withEdits(withEdits(SKILL_V25,FINISH_TOOLS_V26),GRAPHICS_V27)});
+const SKILL_V27=withEdits(withEdits(SKILL_V25,FINISH_TOOLS_V26),GRAPHICS_V27);
+
+/**
+ * v28: the four gap branches in one version. Creator notes and text from
+ * outside (skill-notes.ts); styles, with standing rules now kept per style
+ * (styles/agent-text.ts); several cameras or mics and log/HDR colour
+ * (media-skill-text.ts); make_graphic templates, native Remotion scenes,
+ * papercraft, pixel art and text behind the speaker (scene-skill.ts). The
+ * Graphics process picks the tool, cheapest first; a second camera moves from
+ * show_footage sync to set_angles.
+ */
+const MERGE_V28:[old:string,text:string][]=[
+  [`- **Graphic** (HyperFrames): information`,`- **Graphic**: information`],
+  [`- **Footage the speaker points at** (\`show_footage\` with \`sync: true\`): a
+  clip recorded with the speaker — a screen recording, a second camera —
+  shares their clock.`,
+   `- **Footage the speaker points at** (\`show_footage\` with \`sync: true\`): a
+  screen recording made with the speaker shares their clock (another camera:
+  see Several cameras or mics).`],
+  [`2. Design it with \`render_graphic\`: your own HyperFrames composition, made
+   for this idea in this video — a diagram, a timeline, a chart, a map, a
+   comparison, a list, a single word. Start from what the viewer must get,
+   then the layout and motion that make it land. No two graphics in a video
+   should look like one template with new words. Land each part on the word`,
+   `2. Make it, cheapest first: \`make_graphic\` when a designed template
+   (list, stat, before/after, key term, compare, title, flow) says it;
+   \`render_scene\` with a built-in (\`list_scenes\`: Title, LowerThird, Hook,
+   Annotate, Sparkles, ProgressBar, Rec, WordStack, Flash), passing only the
+   props you change; else your own, made for this idea in this video:
+   \`write_scene\` then \`render_scene\` (see Native scenes), or
+   \`render_graphic\` (a HyperFrames composition) — a diagram, a timeline, a
+   chart, a map, a comparison, a list, a single word. Start from what the
+   viewer must get, then the layout and motion that make it land. No two
+   graphics in a video should look like one template with new words, the
+   templates' included. Land each part on the word`],
+  [`### Taste
+`,`${BEHIND_SUBJECT_SKILL_TEXT}
+
+### Taste
+`],
+  [`## Variants
+`,`${SCENES_SKILL_TEXT}
+
+${PAPERCRAFT_SKILL_TEXT}
+
+${PIXEL_SKILL_TEXT}
+
+## Variants
+`],
+  [`## Sound effects
+`,`${MULTICAM_SKILL_TEXT}
+## Sound effects
+`],
+  [`(intensity 20-40), the same on every clip of one scene.
+`,`(intensity 20-40), the same on every clip of one scene.
+${LOG_COLOUR_SKILL_TEXT}`],
+  [`## Standing rules
+
+A creator's request that should last ("always", "every time", "from now on",
+"in every video") becomes a standing rule: do it in this edit, then call
+\`propose_rule\` once, with the rule written for any video in one or two
+plain sentences, and the creator's own words. Tell them in one line what you
+understood. They accept, reword or refuse it. A one-off fix (this cut, this
+moment) is not a rule. Rules they accepted on earlier edits come in the
+brief: follow them, and say in \`finish\` when this video could not keep one.
+`,
+   `${NOTES_SKILL_TEXT}
+${STYLE_SKILL_TEXT}
+## Standing rules
+
+A creator's request that should last ("always", "every time", "from now on",
+"in every video") becomes a rule of the edit's style: do it in this edit,
+then call \`propose_rule\` once, with the rule written for any video in one
+or two plain sentences, and the creator's own words. Show it word for word
+and ask: keep it, change the wording, or drop it. Where \`decide_rule\`
+exists, record their answer with it (accept, edit with their words, refuse;
+retire takes out a rule they no longer want), never before they answer. A
+one-off fix (this cut, this moment) is not a rule. Accepted rules come in the
+brief: follow them, and say in \`finish\` when this video could not keep one.
+`],
+];
+
+export const AGENT_SKILL_PROMPT_ID=registerPrompt('video.agent-editor',{20:SKILL_V20,21:SKILL_V21,22:SKILL_V22,23:withMechanics(SKILL_V22),24:SKILL_V24,25:SKILL_V25,26:withEdits(SKILL_V25,FINISH_TOOLS_V26),27:SKILL_V27,28:withEdits(SKILL_V27,MERGE_V28)});

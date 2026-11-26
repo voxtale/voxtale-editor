@@ -4,7 +4,7 @@ import {
   activeMember,checkEditDoc,clipLut,converter,decode,groupFromStarts,newEditDoc,parseCube,parseEditDoc,sampleCube,syncTime,upgradeEditDoc,writeCube,
   EDITDOC_VERSION,STYLE_PRESETS,type ClipRef,type EditDoc,type RGB,
 } from '@voxtale/editdoc';
-import {planRender,splitBoxes} from '../src/video/render-edit';
+import {planRender,splitBoxes,subjectSpans} from '../src/video/render-edit';
 
 const fps={num:30,den:1};
 const hash=(c:string)=>c.repeat(64);
@@ -114,5 +114,30 @@ describe('log and HDR',()=>{
     const cube=parseCube(writeCube(id,2,'id'));
     expect(sampleCube(cube,[0.25,0.5,0.75]).map(v=>+v.toFixed(4))).toEqual([0.25,0.5,0.75]);
     expect(()=>parseCube('LUT_3D_SIZE 2\n0 0 0\n')).toThrow();
+  });
+});
+
+describe('EditDoc v6: media and graphics fields together',()=>{
+  const full=()=>{
+    const d=doc({angle:'close',mic:'lav'});
+    return {...d,clips:d.clips.map(c=>c.id==='close'?{...c,avOffset:0.08}:c),
+      tracks:{...d.tracks,graphics:[{id:'g1',assetId:'ga-1',start:0,end:2,owner:'agent',behindSubject:true}]}};
+  };
+  it('one v6 holds groups, angle, mic, avOffset and behindSubject',()=>{
+    const p=parseEditDoc(full()).doc;
+    expect(p.version).toBe(6);
+    expect([p.groups.length,p.tracks['a-roll'][0]!.angle,p.clips.find(c=>c.id==='close')!.avOffset,p.tracks.graphics[0]!.behindSubject]).toEqual([1,'close',0.08,true]);
+  });
+  it('v3, v4 and v5 docs still load, with none of the new fields',()=>{
+    const d=doc({});
+    const {groups:_,...old}=d;
+    for(const version of [3,4,5]) {
+      const p=parseEditDoc({...old,version}).doc;
+      expect([p.version,p.groups,p.tracks.graphics]).toEqual([6,[],[]]);
+    }
+  });
+  it('a subject mask follows the angle shown, in step',()=>{
+    const [x]=subjectSpans(parseEditDoc(full()).doc);
+    expect([x!.clipId,x!.srcStart,x!.srcEnd]).toEqual(['close',5,7]);
   });
 });
