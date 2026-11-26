@@ -17,6 +17,5 @@ bench/**/*.log
 .beads/proxieddb/
 *.gate.lock*
 
-# Subject mask model: tools/fetch-subject-model.sh
-models/u2netp.onnx
+# DJI D-Log M LUTs: tools/fetch-dji-luts.sh (DJI's licence; not committed)
 models/luts/

@@ -5,9 +5,9 @@ import type { EventEmitter } from "node:events";
 
 export interface SpawnResult { code: number; stdout: string; stderr: string }
 
-export function spawnText(command: string, args: string[], opts: { stdin?: string; signal?: AbortSignal; timeoutMs?: number } = {}): Promise<SpawnResult> {
+export function spawnText(command: string, args: string[], opts: { stdin?: string; signal?: AbortSignal; timeoutMs?: number; cwd?: string } = {}): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: [opts.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
+    const child = spawn(command, args, { ...(opts.cwd ? { cwd: opts.cwd } : {}), stdio: [opts.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
     const out: Buffer[] = [], err: Buffer[] = [];
     child.stdout!.on("data", (b: Buffer) => out.push(b));
     child.stderr!.on("data", (b: Buffer) => err.push(b));
