@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {createReadStream,existsSync} from 'node:fs';
 import {mkdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {basename,dirname,join,resolve} from 'node:path';
-import {clipRefSchema,handEdits,parseEditDoc,parseLoudness,type ClipRef,type EditDoc} from '@voxtale/editdoc';
+import {clipRefSchema,handEdits,parseEditDoc,parseLoudness,type ClipRef,type EditDoc,type EditStyle} from '@voxtale/editdoc';
 
 import {beatsOfFile} from '../../beats';
 import type {FaceFinder,VisionModel} from '../../footage-index';
@@ -18,6 +18,7 @@ import {loudnessReport,renderEditDoc,type OutputShape} from '../../render-edit';
 import {transcribe} from '../../transcript';
 import type {Point} from '../../zoom';
 import type {Job,JobClip} from '../agent/cut';
+import type {StyleUse} from '../styles/use';
 import {eyeFinder} from '../agent/eyes';
 import {localFrames,type FrameHost,type HtmlRenderer} from '../agent/frames';
 import {ff} from '../agent/look';
@@ -33,6 +34,8 @@ export interface OpenFile {path:string;role:Role;voice:boolean;synced:boolean}
 export type Format='vertical'|'horizontal';
 /** format: the picture for a voiceover-only edit; with a speaker on camera, their clip sets it. */
 export interface OpenOptions {files:OpenFile[];style?:string;target?:number;instruction?:string;format?:Format;
+  /** A style folder, resolved (../styles/use): its EditStyle wins over `style`. */
+  styled?:{style:EditStyle;use:StyleUse};
   /** Labels footage for find_footage and screen_activity; null = transcribe only (the reason is logged). */
   vision?:VisionModel|null}
 export interface Project {job:Job;sources:Record<string,string>;voiceover:boolean}
@@ -155,7 +158,8 @@ export async function openProject(a:At,o:OpenOptions,log:Log):Promise<void> {
     sources[hash]=path;
     log(`${clip.ref.id} ${f.voice?'voiceover':clip.ref.role} ${clip.ref.name} ${clip.ref.duration.toFixed(1)}s${clip.ref.width?` ${clip.ref.width}x${clip.ref.height}`:''}${clip.words.length?` ${clip.words.length} words`:''}`);
   }
-  const job=newJob({id:'edit',name:basename(a.folder),clips,style:styleFor(o.style),synced,
+  const job=newJob({id:'edit',name:basename(a.folder),clips,style:o.styled?.style??styleFor(o.style),synced,
+    ...(o.styled?{styleUse:o.styled.use,rules:o.styled.use.rules}:{}),
     ...(o.target?{targetSeconds:o.target}:{}),...(o.instruction?{instruction:o.instruction}:{})});
   for(const s of job.sync??[])log(`${s.clip} recorded with ${s.with} (same clock): show it with sync:true`);
   if(o.vision)await labelFootage(a,job,sources,o.vision,log);

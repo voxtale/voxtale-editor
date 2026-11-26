@@ -25,8 +25,10 @@ import {z,type ToolResult} from '../agent/port';
 import {jobTools,newWorkspace} from '../agent/session';
 import type {Workspace} from '../agent/tools';
 import {EDITDOC_GUIDE,editingGuide,SERVER_INSTRUCTIONS} from './guide';
-import {acceptedRules,decideRule,pendingRules,proposeRule,type EditRule} from '../rules';
-import {fileRules} from '../rules-file';
+import {styleTools} from './style-tools';
+import {stylesRoot} from '../styles/folder';
+import {migrateGlobalRules} from '../styles/style-rules';
+import {isPreset,useStyle} from '../styles/use';
 import {clipFiles,clipLines,finalDoc,hasProject,keepProject,loadProject,openProject,projectAt,renderProject,sheetOf,
   type At,type OpenFile,type Ports,type Project,type Role} from './project';
 
@@ -39,8 +41,10 @@ export interface LocalEditorOptions {
   graphics?:boolean;
   /** Where graphics renderers install (remotion/, hyperframes/ under it); default ~/.voxtale-editor. */
   graphicsHome?:string;
-  /** The creator's standing rules (JSON); default ~/.voxtale-editor/rules.json. */
+  /** The old global rules file (before styles), moved once into the style "my-style"; default ~/.voxtale-editor/rules.json. */
   rulesFile?:string;
+  /** Style folders (rules.md, style.json, brand/, references/); default VOXTALE_STYLES, else ~/.voxtale-editor/styles. */
+  stylesDir?:string;
   /** Labels footage at open; default the OpenRouter vision model when OPENROUTER_API_KEY is set, null = off. */
   vision?:VisionModel|null;
   version?:string;
@@ -71,20 +75,22 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
 
   let at:At|undefined;
   let open:{p:Project;ws:Workspace}|undefined;
-  const rules=fileRules(o.rulesFile??join(homedir(),'.voxtale-editor','rules.json'));
-  /** Rules the agent proposed this edit go to the creator's file as proposed; the accepted ones ride in the job. */
-  async function syncRules(ws:Workspace):Promise<EditRule[]> {
-    let all=await rules.load();
-    const before=all.length;
-    for(const p of ws.proposedRules??[])all=proposeRule(all,{...p,editId:ws.job.id}).rules;
-    if(all.length!==before)await rules.save(all);
-    ws.job.rules=acceptedRules(all).map(r=>r.text);
-    return all;
+  const styles=stylesRoot(o.stylesDir);
+  let migrated:Promise<unknown>|undefined;
+  /** Style folders, with the old global rules moved in on first use. */
+  const root=async()=>{await (migrated??=migrateGlobalRules(styles,o.rulesFile??join(homedir(),'.voxtale-editor','rules.json')));return styles;};
+  /** The open edit's style, read again: the creator may have edited rules.md or the brand since. The EditStyle (pace, caption look) stays the edit's. */
+  async function refreshStyle(ws:Workspace):Promise<void> {
+    const u=ws.job.styleUse;
+    if(!u)return;
+    const r=await useStyle(await root(),u.slug,u.usage).catch(()=>undefined);
+    if(!r)return;
+    ws.job.styleUse=r.use;
+    ws.job.rules=r.use.rules;
   }
-  const ruleLine=(r:EditRule)=>`${r.id} [${r.status}] ${r.text}${r.said?` (from: "${r.said}")`:''}`;
   async function load(a:At,announce=true):Promise<void> {
     open=await loadProject(a,await portsOf());
-    await syncRules(open.ws);
+    await refreshStyle(open.ws);
     at=a;
     // The footage decides which editor tools apply.
     if(announce)notify()('notifications/tools/list_changed',{});
@@ -101,6 +107,7 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
   let guided=false;
   const guide=()=>{guided=true;return editingGuide(graphics,!!vision);};
   const brief=(ws:Workspace)=>`Brief:\n${taskPrompt(ws.job,graphics)}\nThen render, and look at the result with sheet.`
+    +(ws.job.styleUse?'':`\nNo style folder chosen for this edit: if the creator has styles (styles lists them), ask which one to follow and call use_style.`)
     +(guided?'':`\n\n--- Editing guide (read before the first edit) ---\n${guide()}`);
 
   const folderArg=z.string().optional().describe('footage folder (absolute); default: the server\'s EDIT_FOLDER or working folder');
@@ -112,14 +119,16 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
       input:{folder:folderArg,
         files:z.array(z.object({path:z.string().describe('absolute, or relative to folder'),role:z.enum(Object.keys(ROLES) as [string,...string[]])})).min(1),
         format:z.enum(['vertical','horizontal']).optional().describe('voiceover only: the picture\'s shape; default the first footage\'s'),
-        style:z.enum(STYLES).optional().describe('edit style (pace, captions, look)'),
+        style:z.string().max(80).optional().describe(`edit style: a preset (${STYLES.join(', ')}) or a style folder by name (styles lists them): its rules, measured pace and brand load into the brief`),
+        usage:z.string().max(40).optional().describe('style folder only: which measured set (long, short...); default its only one'),
         target:z.number().positive().max(3600).optional().describe('target length, seconds'),
         note:z.string().max(2000).optional().describe('what the creator asked for')},
-      run:async({folder,files,format,style,target,note},ctx)=>{
+      run:async({folder,files,format,style,usage,target,note},ctx)=>{
         const a=projectAt(folderOf(folder)),lines:string[]=[];
         const log=(l:string)=>{lines.push(l);console.error(l);ctx.progress(lines.length,undefined,l.trim());};
         const of=(files as {path:string;role:string}[]).map(f=>{const [role,voice,synced]=ROLES[f.role]!;return {path:f.path,role,voice,synced} satisfies OpenFile;});
-        await openProject(a,{files:of,...(format?{format}:{}),...(style?{style}:{}),...(target?{target}:{}),...(note?{instruction:note}:{}),vision},log);
+        const styled=style&&!isPreset(style)?await useStyle(await root(),style,usage):undefined;
+        await openProject(a,{files:of,...(format?{format}:{}),...(style&&!styled?{style}:{}),...(styled?{styled}:{}),...(target?{target}:{}),...(note?{instruction:note}:{}),vision},log);
         await load(a);
         return {text:`${lines.join('\n')}\n\nOpen: ${a.folder}\nclips:\n${clipLines(open!.ws)}\n\n${brief(open!.ws)}`};
       }},
@@ -169,23 +178,6 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
         return {text:JSON.stringify({editDoc:resolve(a.dir,'edit.json'),clips:clipFiles(p),...(graphics.length?{graphics}:{})},null,1)};
       }},
 
-    {name:'rules',description:'The creator\'s standing rules: accepted ones (in every edit\'s brief), ones proposed and waiting for their answer, refused ones.',
-      input:{},run:async()=>{
-        const all=open?await syncRules(open.ws):await rules.load();
-        return {text:all.length?all.map(ruleLine).join('\n'):'No standing rules yet.'};
-      }},
-
-    {name:'decide_rule',description:'Record the creator\'s answer to a proposed standing rule: accept (text: their wording, when they changed it), or refuse. Also retires an accepted rule (refuse). Only after the creator answered, never on your own.',
-      input:{id:z.string(),decision:z.enum(['accept','refuse']),text:z.string().min(5).max(300).optional()},
-      run:async({id,decision,text})=>{
-        if(open)await syncRules(open.ws);
-        const all=decideRule(await rules.load(),id,decision,text);
-        await rules.save(all);
-        if(open)open.ws.job.rules=acceptedRules(all).map(r=>r.text);
-        const r=all.find(x=>x.id===id)!;
-        return {text:`${ruleLine(r)}\n${acceptedRules(all).length} accepted rule(s) load into every later edit.${pendingRules(all).length?` ${pendingRules(all).length} still waiting.`:''}`};
-      }},
-
     {name:'export_timeline',description:'Write the edit as a timeline other editors open: fcpxml (DaVinci Resolve, Final Cut Pro, Premiere) or otio (OpenTimelineIO). Also writes the captions as an .srt next to it. The timeline plays the original files: zooms, graphics, text cards and caption looks do not carry over (say so to the creator).',
       input:{format:z.enum(['fcpxml','otio']),out:z.string().optional().describe('file, absolute or relative to the folder; default <folder>/edit.<format>')},
       run:async({format,out})=>{
@@ -203,6 +195,7 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
         const missing=p.job.clips.filter(c=>!existsSync(p.sources[c.ref.hash]??'')).map(c=>c.ref.name);
         return {text:`${file}\n${srt}${missing.length?`\nmissing on disk (the editor will ask for them): ${missing.join(', ')}`:''}`};
       }},
+    ...styleTools({root,current:()=>open&&at?{ws:open.ws,keep:()=>keepProject(at!,open!.p,open!.ws)}:undefined}),
   ];
   const serverNames=new Set(SERVER.map(t=>t.name));
 
@@ -213,10 +206,7 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
     const live=jobTools(ws).find(x=>x.name===t.name);
     if(!live)return {text:`${t.name} does not apply to this project.`,isError:true};
     try {
-      const r=await live.run(args);
-      // A rule the agent just proposed lists for the creator's answer.
-      if(t.name==='propose_rule'){const all=await syncRules(ws);const w=pendingRules(all).at(-1);if(w)return {...r,text:`${r.text}\nRule id ${w.id}: ask the creator, then decide_rule.`};}
-      return r;
+      return await live.run(args);
     }
     finally {await keepProject(a,p,ws);}
   }}));

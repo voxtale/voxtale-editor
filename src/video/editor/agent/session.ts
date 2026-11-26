@@ -26,6 +26,8 @@ export interface JobInput {
   project?:ProjectBrief;
   /** The creator's accepted standing rules. */
   rules?:string[];
+  /** The style folder the edit follows. */
+  styleUse?:Job['styleUse'];
   /** Clip ids the creator says were recorded with the speaker, from the same start. */
   synced?:string[];
 }
@@ -34,7 +36,7 @@ export interface JobInput {
 export function newJob(o:JobInput):Job {
   const {clips}=o;
   const job:Job={id:o.id,name:o.name,clips,style:o.style,
-    ...(o.targetSeconds?{targetSeconds:o.targetSeconds}:{}),...(o.instruction?{instruction:o.instruction}:{}),...(o.project?{project:o.project}:{}),...(o.rules?.length?{rules:o.rules}:{})};
+    ...(o.targetSeconds?{targetSeconds:o.targetSeconds}:{}),...(o.instruction?{instruction:o.instruction}:{}),...(o.project?{project:o.project}:{}),...(o.rules?.length?{rules:o.rules}:{}),...(o.styleUse?{styleUse:o.styleUse}:{})};
   // Effects files given to a style that has none: use them, quietly.
   if(clips.some(c=>c.ref.role==='sfx')&&job.style.audio.sfx==='off')job.style={...job.style,audio:{...job.style.audio,sfx:'subtle'}};
   const sync=syncClips(clips.map(c=>({id:c.ref.id,kind:c.ref.kind,role:c.ref.role,duration:c.ref.duration,hasAudio:c.ref.hasAudio,speaks:speaking(c)&&c.words.length>0})));

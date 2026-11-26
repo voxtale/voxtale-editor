@@ -4,8 +4,8 @@
 // hash: the host finds its own file for each. ffmpeg only, no model.
 import {spawn} from 'node:child_process';
 import type {EventEmitter} from 'node:events';
-import {mkdir,readFile,rm,stat,writeFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {copyFile,mkdir,readFile,rm,stat,writeFile} from 'node:fs/promises';
+import {basename,join} from 'node:path';
 import {VOICE_STEP,packVoice,voiceFrames} from './voice';
 
 export type Ff=(args:string[])=>Promise<void>;
@@ -47,6 +47,11 @@ export interface GraphicJob {
   stills:number[];
   /** Source frame the stills sit over. */
   backdrop:FramePoint;
+  /**
+   * Files on this machine copied next to the composition as ./brand/<name> (brand fonts, logo).
+   * Local hosts only: a relay host has no access to them and leaves them out.
+   */
+  files?:{name:string;path:string}[];
 }
 
 export interface GraphicResult {
@@ -203,6 +208,10 @@ export async function renderGraphic(dir:string,job:GraphicJob,backdrop:string,re
   await mkdir(inDir,{recursive:true});await mkdir(outDir,{recursive:true});
   await writeFile(join(inDir,'index.html'),job.html);
   await writeFile(join(inDir,'kit.css'),job.kitCss);
+  if(job.files?.length) {
+    await mkdir(join(inDir,'brand'),{recursive:true});
+    for(const f of job.files)await copyFile(f.path,join(inDir,'brand',basename(f.name))).catch(()=>{});
+  }
   let r:Awaited<ReturnType<HtmlRenderer>>;
   try {r=await render({dir:inDir,width:job.width,height:job.height,seconds:job.seconds});}
   catch(e) {r={ok:false,report:`render failed: ${tail(e instanceof Error?e.message:String(e))}`};}
