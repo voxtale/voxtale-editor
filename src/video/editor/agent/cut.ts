@@ -10,6 +10,7 @@ import {libraryClip,SFX_SOUND_IDS,type SfxSound} from '../../sfx';
 import type {Face} from './kit';
 import type {ProjectBrief} from '../project';
 import type {ClipMoments,ClipSync} from '../../moments';
+import {applyMulticam,type Multicam} from './multicam';
 import {
   FADE_MAX,STYLE_PRESETS,buildCaptions,newEditDoc,outputTimes,packSequence,parseEditDoc,FPS_30,snap,snapDown,snapUp,transitionLength,
   type ARollItem,type Fps,type Grade,type TransitionKind,type ZoomCurve,type ZoomItem,type BRollItem,type ClipIndex,type ClipRef,type EditDoc,type EditStyle,type GraphicItem,type PipCorner,type SourceWord,type TextItem,type WordFix,
@@ -123,6 +124,10 @@ export interface Overlays {wordFixes?:WordFix[];graphics?:GraphicPlacement[];cap
   sfx?:SfxPlacement[];
   /** Colour grade per source clip id (set_look). */
   grades?:Record<string,Grade>;
+  /** Per clip id: colour space or input LUT (set_look) and A/V offset (set_av_offset), over what the open found. */
+  clipSettings?:Record<string,Pick<ClipRef,'colorSpace'|'inputLut'|'avOffset'>>;
+  /** Clips recorded together and which camera/mic each piece uses (set_angles). */
+  multicam?:Multicam;
   /** Eyes at a source time, for zoom's eye match; the index's face stands in without it. */
   eyesAt?:EyesAt;
   /**
@@ -312,7 +317,7 @@ export function buildCut(job:Job,segments:Segment[],o:Overlays={}):EditDoc {
   const main=canvasClip(job,raw);
   // Library sounds the agent's hits use join the clips; grades ride on their clips.
   const lib=SFX_SOUND_IDS.filter(n=>o.sfx?.some(h=>h.clipId===libraryClip(n).id)&&!job.clips.some(c=>c.ref.id===libraryClip(n).id)).map((n:SfxSound)=>libraryClip(n));
-  const graded=(r:ClipRef):ClipRef=>{const g=o.grades?.[r.id];return g?{...r,grade:g}:r;};
+  const graded=(r:ClipRef):ClipRef=>{const g=o.grades?.[r.id];return {...r,...o.clipSettings?.[r.id],...(g?{grade:g}:{})};};
   let doc=newEditDoc({id:job.id,name:job.name,clips:[...job.clips.map(c=>graded(c.ref)),...lib],fps:main.fps,style:job.style,
     canvas:{width:main.width??1920,height:main.height??1080}});
   if(o.wordFixes?.length)doc={...doc,wordFixes:o.wordFixes};
@@ -364,7 +369,7 @@ export function buildCut(job:Job,segments:Segment[],o:Overlays={}):EditDoc {
   // Audio as core's audio stage does it: the creator's music under the video, effects on what appears.
   const audio=planAudio(doc,musicCues(job,doc,o.music),o.sfx&&sfxHits(job,doc,o.sfx));
   doc={...doc,tracks:{...doc.tracks,music:audio.music,sfx:audio.sfx},mix:{...doc.mix,...audio.mix}};
-  return parseEditDoc(doc).doc;
+  return parseEditDoc(applyMulticam(doc,job,o.multicam)).doc;
 }
 
 /**
