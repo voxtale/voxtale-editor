@@ -9,8 +9,8 @@ import {createReadStream,existsSync} from 'node:fs';
 import {mkdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {basename,dirname,join,resolve} from 'node:path';
 import {clipRefSchema,groupFromStarts,handEdits,overlapSeconds,parseEditDoc,parseLoudness,FORMULAS,SYNC_CONFIDENCE_MIN,type ClipRef,type EditDoc,type EditStyle,type SyncGroup} from '@voxtale/editdoc';
-import {detectColor,makeProxy,mediaInfo,needsProxy} from '../../footage-media';
-import {activityLevels,decodeMono,envelope,placeBySound,SYNC_RATE} from '../../sound-sync';
+import {detectColor,makeProxy,mediaInfo,needsProxy,proxyFits} from '../../footage-media';
+import {activityLevels,decodeMono,envelope,measureAvOffset,placeBySound,SYNC_RATE} from '../../sound-sync';
 import {syncFromGroups} from '../agent/multicam';
 
 import {beatsOfFile} from '../../beats';
@@ -39,7 +39,9 @@ export type Format='vertical'|'horizontal';
 /** format: the picture for a voiceover-only edit; with a speaker on camera, their clip sets it. */
 export interface OpenOptions {files:OpenFile[];
   /** false: no light copies; previews read the originals (slow on 4K or 10-bit). */
-  proxies?:boolean;style?:string;target?:number;instruction?:string;format?:Format;
+  proxies?:boolean;
+  /** false: skip the A/V offset check on talk clips (also VOXTALE_EDITOR_AV_CHECK=0). */
+  avCheck?:boolean;style?:string;target?:number;instruction?:string;format?:Format;
   /** A style folder, resolved (../styles/use): its EditStyle wins over `style`. */
   styled?:{style:EditStyle;use:StyleUse};
   /** Labels footage for find_footage and screen_activity; null = transcribe only (the reason is logged). */
@@ -105,7 +107,17 @@ export function noSpeech(e:unknown):boolean {
   return e instanceof Error&&/requires video footage with an audio track|no spoken audio/i.test(e.message);
 }
 
-async function loadClip(a:At,id:string,path:string,role:Role,log:Log,o:{proxy?:boolean}={}):Promise<{clip:JobClip;hash:string;proxy?:string}> {
+/** On unless the caller or VOXTALE_EDITOR_AV_CHECK=0 turns it off. */
+export const avCheckOn=(o?:boolean,env=process.env.VOXTALE_EDITOR_AV_CHECK)=>o!==false&&env!=='0'&&env!=='false';
+
+/** What to tell the agent about a measured A/V offset: nothing under one frame or on a weak match. bd voxtale-editor-c7h. */
+export function avOffsetNote(id:string,m:{offset:number;confidence:number}|null,fps:number):string|undefined {
+  if(!m||Math.abs(m.offset)<Math.max(1/fps,0.02)-1e-6)return undefined;
+  const ms=Math.round(Math.abs(m.offset)*1000);
+  return `warning: ${id} sound is ${ms}ms ${m.offset>0?'ahead of':'behind'} the lips (match ${m.confidence.toFixed(1)}): check with a still and fix with set_av_offset ${id} measure:true`;
+}
+
+async function loadClip(a:At,id:string,path:string,role:Role,log:Log,o:{proxy?:boolean;avCheck?:boolean}={}):Promise<{clip:JobClip;hash:string;proxy?:string}> {
   const info=await probe(path),hash=await sha256(path);
   const kind=info.width?'video':'audio';
   let words:JobClip['words']=[];
@@ -132,6 +144,19 @@ async function loadClip(a:At,id:string,path:string,role:Role,log:Log,o:{proxy?:b
   if(media&&o.proxy!==false&&needsProxy(media)) {
     log(`light copy of ${basename(path)} for editing (${media.width}x${media.height} ${media.codec} ${media.pixFmt})…`);
     proxy=await makeProxy(path,join(a.dir,'proxies',`${hash.slice(0,16)}.mp4`)).catch(e=>{log(`warning: no light copy of ${basename(path)}: ${(e as Error).message}`);return undefined;});
+    // Fractions read off the proxy (crops, eyes, zoom boxes) land on the original only when the shapes match.
+    const p=proxy?await probe(proxy).catch(()=>null):null;
+    if(proxy&&!(p?.width&&p.height&&info.width&&info.height&&proxyFits({width:info.width,height:info.height},{width:p.width,height:p.height}))) {
+      log(`warning: light copy of ${basename(path)} is ${p?.width??'?'}x${p?.height??'?'}, not the shape of ${info.width}x${info.height}: previews read the original`);
+      proxy=undefined;
+    }
+  }
+  // Talk clips: sound against lips over the first 30 s, read off the light copy. Reported only; set_av_offset applies it.
+  if(role==='a-roll'&&kind==='video'&&info.audio&&words.length&&avCheckOn(o.avCheck)) {
+    const rate=fps(info.rate),f=rate.num/rate.den;
+    const m=await measureAvOffset(proxy??path,f,{seconds:30}).catch(()=>null);
+    const say=avOffsetNote(id,m,f);
+    if(say)log(say);
   }
   // Music: its beat, so joins and shots can land on it.
   const beats=role==='music'&&info.audio?await beatsOfFile(path,ff).catch(()=>undefined):undefined;
@@ -197,7 +222,7 @@ export async function openProject(a:At,o:OpenOptions,log:Log):Promise<void> {
   // Speaking clips first: the first one sets the canvas.
   for(const f of [...files.filter(f=>f.role==='a-roll'),...files.filter(f=>f.role!=='a-roll')]) {
     const path=f.voice?await voiceVideo(a,f.path,format!):f.path;
-    const {clip,hash,proxy}=await loadClip(a,`c${++n}`,path,f.role,log,{proxy:o.proxies});
+    const {clip,hash,proxy}=await loadClip(a,`c${++n}`,path,f.role,log,{proxy:o.proxies,avCheck:o.avCheck});
     if(proxy)proxies[hash]=proxy;
     if(f.voice)clip.ref={...clip.ref,name:basename(f.path)};
     clips.push(clip);

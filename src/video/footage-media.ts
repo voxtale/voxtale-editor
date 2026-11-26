@@ -54,6 +54,28 @@ export async function makeProxy(src:string,out:string,o:{height?:number;signal?:
   return out;
 }
 
+export interface Size {width:number;height:number}
+
+/**
+ * Previews, filmstrips and the face finder read the proxy; crops, eye points
+ * and zoom boxes travel as fractions of its frame and land on the original.
+ * That holds only when the proxy has the source's shape: same orientation,
+ * same aspect within the even-pixel rounding of the scale. bd voxtale-editor-60q.
+ */
+export function proxyFits(source:Size,proxy:Size):boolean {
+  if(!source.width||!source.height||!proxy.width||!proxy.height)return false;
+  if((source.width>=source.height)!==(proxy.width>=proxy.height))return false;
+  // Width the proxy should have at its height, from the source's aspect; scale=-2 rounds to even.
+  const want=proxy.height*source.width/source.height;
+  return Math.abs(proxy.width-want)<=2.01;
+}
+
+/** A point or box in proxy pixels, in the original's pixels (each axis by its own scale). */
+export function proxyToSource<T extends {x:number;y:number;w?:number;h?:number}>(p:T,proxy:Size,source:Size):T {
+  const kx=source.width/proxy.width,ky=source.height/proxy.height;
+  return {...p,x:p.x*kx,y:p.y*ky,...(p.w!==undefined?{w:p.w*kx}:{}),...(p.h!==undefined?{h:p.h*ky}:{})};
+}
+
 // Darkest point of 3 frames (10-bit, video black = 0, white = 1), measured
 // by REDACTED on 160 DJI files: log >= 0.03 (except at night), normal <= 0.021.
 const BLACK=0.03;
