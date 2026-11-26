@@ -5,6 +5,7 @@
 // companions are read at the same moment, through the group. Pure.
 // Idea from REDACTED editor/src/schema.ts (group sources); code rewritten.
 import type { ARollItem, ClipRef, EditDoc, SyncGroup } from "./schema";
+import { soundSpans } from "./timeline";
 
 /** Sound matches at or above this peak-over-noise are sure. REDACTED's. */
 export const SYNC_CONFIDENCE_MIN = 8;
@@ -113,5 +114,49 @@ export function groupIssues(doc: Pick<EditDoc, "groups" | "clips">): { path: str
     if (other) out.push({ path: at, message: `Clip ${m.clipId} is in groups ${other} and ${g.id}` });
     seen.set(m.clipId, g.id);
   }));
+  return out;
+}
+
+/**
+ * A piece's companions with their source in-point: through the sync group
+ * when both clips are in one (it beats a stored offset), else the stored
+ * offset. Companions that do not hold the whole piece drop out; so does the
+ * clip already shown (`shown`, the angle on multicam).
+ */
+export function companionSources(doc: Pick<EditDoc, "groups" | "clips">, a: Pick<ARollItem, "clipId" | "in" | "out" | "companions">, shown: string): { clipId: string; in: number }[] {
+  const out: { clipId: string; in: number }[] = [];
+  for (const m of a.companions ?? []) {
+    if (m.clipId === shown) continue;
+    const r = syncRange(doc.groups, doc.clips, a.clipId, a.in, a.out, m.clipId);
+    if (r) { out.push({ clipId: m.clipId, in: r.in }); continue; }
+    const c = doc.clips.find(x => x.id === m.clipId), inn = a.in + m.offset;
+    if (c && inn >= -0.05 && a.out + m.offset <= c.duration + 0.05) out.push({ clipId: m.clipId, in: Math.max(0, inn) });
+  }
+  return out;
+}
+
+/** One a-roll piece as heard: output span, the file it plays (its mic) and the source second at `start`. */
+/** `span`: the heard length before a negative avOffset trimmed its head (cut fades size from it). */
+export interface HeardSpeech { item: ARollItem; clipId: string; start: number; end: number; in: number; span: number; fellBack: boolean }
+
+/**
+ * Where each shown a-roll piece is heard: J/L cuts move the span, the mic
+ * gives the file (read in step through the group), and that file's avOffset
+ * moves its sound later. A piece muted to the -60 dB floor, or whose clip has
+ * no sound, plays nothing. Render and export both read this.
+ */
+export function speechSounds(doc: Pick<EditDoc, "groups" | "clips" | "tracks" | "fps">): HeardSpeech[] {
+  const clips = new Map(doc.clips.map(c => [c.id, c]));
+  const sounding = (id: string) => { const c = clips.get(id); return !!c && c.hasAudio && c.kind !== "image"; };
+  const out: HeardSpeech[] = [];
+  const shownItems = doc.tracks["a-roll"].filter(i => i.status !== "suggested" && i.end - i.start > 0);
+  for (const { item: a, start, end, in: inn } of soundSpans(shownItems, doc.fps)) {
+    if (!sounding(a.clipId) || a.gainDb <= -60) continue;
+    const mic = soundSource(doc, { clipId: a.clipId, in: inn, out: inn + (end - start), mic: a.mic });
+    const id = mic.fellBack ? a.clipId : mic.clipId;
+    const shifted = mic.in - (clips.get(id)?.avOffset ?? 0), late = Math.max(0, -shifted);
+    if (late >= end - start) continue;
+    out.push({ item: a, clipId: id, start: start + late, end, in: shifted + late, span: end - start, fellBack: mic.fellBack });
+  }
   return out;
 }
