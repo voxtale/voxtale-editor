@@ -468,3 +468,13 @@ export function pipBox(canvas: { width: number; height: number }, corner: "top-l
   const width = even(canvas.width * s), height = even(canvas.height * s), m = Math.round(canvas.width * PIP.margin);
   return { x: corner.endsWith("left") ? m : canvas.width - m - width, y: corner.startsWith("top") ? m : canvas.height - m - height, width, height };
 }
+
+/** Split layout: left and right halves, or top and bottom on a tall canvas. Preview, render and export read this. */
+export function splitBoxes(c: { width: number; height: number }): [{ x: number; y: number; width: number; height: number }, { x: number; y: number; width: number; height: number }] {
+  if (c.height > c.width) {
+    const h = Math.round(c.height / 2 / 2) * 2;
+    return [{ x: 0, y: 0, width: c.width, height: h }, { x: 0, y: h, width: c.width, height: c.height - h }];
+  }
+  const w = Math.round(c.width / 2 / 2) * 2;
+  return [{ x: 0, y: 0, width: w, height: c.height }, { x: w, y: 0, width: c.width - w, height: c.height }];
+}
