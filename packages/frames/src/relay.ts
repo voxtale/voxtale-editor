@@ -14,7 +14,8 @@ export type FrameCall=
   |{op:'graphic';job:GraphicJob}
   |{op:'sample';clip:string;every:number;width:number;height:number}
   |{op:'audio';clip:string;start:number;end:number}
-  |{op:'voice';clip:string};
+  |{op:'voice';clip:string}
+  |{op:'levels';clip:string};
 
 export type FrameOp=FrameCall['op'];
 
@@ -53,6 +54,8 @@ export function badFrameCall(c:unknown):string|null {
       return HASH.test(String(call.clip))&&num(call.start,0,86_400)&&num(call.end,0,86_400)&&call.end>call.start&&call.end-call.start<=AUDIO_MAX_SECONDS?null:'bad audio range';
     case 'voice':
       return HASH.test(String(call.clip))?null:'bad voice';
+    case 'levels':
+      return HASH.test(String(call.clip))?null:'bad levels';
     default:
       return 'unknown op';
   }
@@ -85,6 +88,10 @@ export async function answerFrameCall(host:FrameHost,call:FrameCall):Promise<Fra
       case 'voice': {
         if(!host.voice)return {ok:false,error:'this computer cannot read clip sound',files:{}};
         return {ok:true,files:{voice:{bytes:await host.voice(call.clip),type:'application/octet-stream'}}};
+      }
+      case 'levels': {
+        if(!host.levels)return {ok:false,error:'this computer cannot read clip sound',files:{}};
+        return {ok:true,files:{levels:{bytes:await host.levels(call.clip),type:'application/octet-stream'}}};
       }
       case 'graphic': {
         const r=await host.graphic(call.job);
@@ -167,6 +174,7 @@ export function relayFrames(o:RelayOptions):FrameHost {
     sample:(clip,every,width,height)=>one({op:'sample',clip,every,width,height},'pixels'),
     audio:(clip,start,end)=>one({op:'audio',clip,start,end},'samples'),
     voice:clip=>one({op:'voice',clip},'voice'),
+    levels:clip=>one({op:'levels',clip},'levels'),
     async graphic(job) {
       let r:FrameReply;
       try {r=await ask({op:'graphic',job});} catch(e) {return {ok:false,report:`render failed: ${msg(e)}`};}

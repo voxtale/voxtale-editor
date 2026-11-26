@@ -8,6 +8,7 @@ import type {StoryClip} from '../../story-edit';
 import {planAudio,type MusicCues,type SfxHit} from '../../audio';
 import {beatGrid,nearestBeat,weakBeds,type BeatGrid} from '../../beats';
 import {libraryClip,SFX_SOUND_IDS,type SfxSound} from '../../sfx';
+import {findCuts,keptSpans,quietest,type Levels} from '../../sound-levels';
 import type {Face} from './kit';
 import type {ProjectBrief} from '../project';
 import type {ClipMoments,ClipSync} from '../../moments';
@@ -40,7 +41,13 @@ export interface Job {id:string;name:string;clips:JobClip[];style:EditStyle;targ
  * `teaser`: a cold open; its words may play again later in the cut.
  * `transition`: into this segment from the one before (none = a hard cut).
  */
-export interface WordSegment {clip:string;from:number;to:number;note?:string;pace?:Pace;hold?:number;teaser?:boolean;transition?:SegmentTransition;audioLead?:number;audioLag?:number;fade?:Fade}
+export interface WordSegment {clip:string;from:number;to:number;note?:string;pace?:Pace;hold?:number;teaser?:boolean;transition?:SegmentTransition;audioLead?:number;audioLag?:number;fade?:Fade;clean?:CleanByLevel}
+/**
+ * Clean by level: inside the segment, pauses come down to `pause` seconds and hesitations (um, uh) go, each cut set on the
+ * clip's measured sound (findCuts). Without levels for the clip, the segment cuts by words as usual.
+ */
+export interface CleanByLevel {pause?:number;fillers?:boolean}
+export const CLEAN_PAUSE=0.25;
 /** Picture fade, seconds: in at the start, out at the end. */
 export interface Fade {in?:number;out?:number}
 /** Fade fields for an item `len` long: both shrunk in step when they would not fit. */
@@ -148,7 +155,9 @@ export interface Overlays {wordFixes?:WordFix[];graphics?:GraphicPlacement[];cap
    */
   edge?:(clipId:string,t:number,side:'in'|'out',limit:number,other?:number)=>number;
   /** How far out from a heard word edge the clip stays quiet (room only, no breath or click), never past `limit`. */
-  quiet?:(clipId:string,t:number,side:'in'|'out',limit:number)=>number}
+  quiet?:(clipId:string,t:number,side:'in'|'out',limit:number)=>number;
+  /** The clip's sound level every 10 ms, when measured: tight edges sit in its trough, and segments with `clean` cut by it. */
+  levels?:(clipId:string)=>Levels|undefined}
 
 /** Shortest and longest b-roll shot; the speaker stays on screen this long at the start (core's values). */
 export const BROLL_MIN=1.5,BROLL_MAX=6,HOOK_HOLD=2;
@@ -310,12 +319,15 @@ export function buildCut(job:Job,segments:Segment[],o:Overlays={}):EditDoc {
       // where outward would reach a cut neighbour's sound and the inward frame still holds the whole
       // kept word does it round inward.
       // Pads stop at the first other sound (a breath, a click): a piece never starts or ends on half of one.
-      const lead0=Math.min(lead,quietFrom!==undefined?Math.max(0,heardIn-quietFrom)/2:lead);
+      // Words that run together (less room than the pads): the cut sits at the quietest 10 ms between them, else halfway.
+      const lv=o.levels?.(c.ref.id);
+      const between=(a:number,b:number)=>lv&&b>a?quietest(lv,a,b):(a+b)/2;
+      const lead0=Math.min(lead,quietFrom!==undefined?Math.max(0,heardIn-(heardIn-quietFrom<2*lead?between(quietFrom,heardIn):(quietFrom+heardIn)/2)):lead);
       const clearIn=o.quiet?o.quiet(c.ref.id,heardIn,'in',quietFrom??0):0;
       const inS=outward(Math.max(0,clearIn,heardIn-lead0),'in',heardIn,Math.max(quietFrom??0,clearIn),fps);
       // A held beat keeps the pause that follows the line, as far as the source has one.
       const held=s.hold&&r===runs.length-1?Math.max(0,Math.min(s.hold,(after?after.start:c.ref.duration)-heardOut-HOLD_GUARD)):0;
-      const tail0=Math.min(tail,quietTo!==undefined?Math.max(0,quietTo-heardOut)/2:tail);
+      const tail0=Math.min(tail,quietTo!==undefined?Math.max(0,(quietTo-heardOut<2*tail?between(heardOut,quietTo):(heardOut+quietTo)/2)-heardOut):tail);
       const clearOut=o.quiet?o.quiet(c.ref.id,heardOut,'out',Math.min(c.ref.duration,quietTo??c.ref.duration)):c.ref.duration;
       const outS=outward(Math.min(c.ref.duration,heardOut+Math.max(held,Math.min(tail0,clearOut-heardOut))),'out',heardOut,
         Math.min(quietTo??c.ref.duration,c.ref.duration,held>0?c.ref.duration:clearOut),fps);
@@ -323,6 +335,20 @@ export function buildCut(job:Job,segments:Segment[],o:Overlays={}):EditDoc {
         owner:'agent' as const,stage:'agent',status:'applied' as const,gainDb:0,
         reason:((r?'(pause trimmed) ':'')+(held>tail?'(held beat) ':'')+(s.note??'kept')).slice(0,300),
         evidence:[{kind:'word' as const,ref:`${c.ref.id}:${first.id}`},{kind:'word' as const,ref:`${c.ref.id}:${last.id}`}]};
+    }).flatMap(p=>cleaned(s,c,p));
+  }
+  /** A piece of a `clean` segment split where findCuts cuts it; edges round outward to the frame, never past a cut's far side. */
+  function cleaned(s:WordSegment,c:JobClip,p:ARollItem):ARollItem[] {
+    const lv=s.clean&&o.levels?.(c.ref.id);
+    if(!lv)return [p];
+    const cuts=findCuts([{source:c.ref.id,in:p.in,out:p.out}],{[c.ref.id]:c.words},{[c.ref.id]:lv},
+      {pause:s.clean!.pause??CLEAN_PAUSE,fillers:s.clean!.fillers??true});
+    if(!cuts.length)return [p];
+    const spans=keptSpans(p.in,p.out,cuts);
+    return spans.map(([a,b],n)=>{
+      const lo=cuts.filter(x=>x.b<=a+1e-6).at(-1)?.a??p.in,hi=cuts.find(x=>x.a>=b-1e-6)?.b??p.out;
+      return {...p,id:n?`${p.id}-c${n}`:p.id,in:a===p.in?p.in:outward(a,'in',a,lo,fps),out:b===p.out?p.out:outward(b,'out',b,hi,fps),
+        reason:`(cleaned) ${p.reason}`.slice(0,300)};
     });
   }
   const main=canvasClip(job,raw);

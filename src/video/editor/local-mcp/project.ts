@@ -309,18 +309,22 @@ interface Session {edits?:number;watchedAt?:number;watchAsked?:boolean;captionLo
 
 const readJson=async<T>(f:string,empty:T):Promise<T>=>existsSync(f)?JSON.parse(await readFile(f,'utf8')):empty;
 
-/** The voice track of a clip is read once (one pass over its sound) and kept in .edit/voicetrack/. */
+/**
+ * The voice track and sound levels of a clip are read once (one pass over its
+ * sound each) and kept in .edit/voicetrack/ and .edit/levels/.
+ */
 function cachedVoice(a:At,frames:FrameHost):FrameHost {
-  const read=frames.voice;
-  if(!read)return frames;
-  return {...frames,voice:async hash=>{
-    const f=join(a.dir,'voicetrack',`${hash.slice(0,16)}.bin`);
+  const keep=(sub:string,read:(hash:string)=>Promise<Uint8Array>)=>async(hash:string)=>{
+    const f=join(a.dir,sub,`${hash.slice(0,16)}.bin`);
     if(existsSync(f))return new Uint8Array(await readFile(f));
     const bytes=await read(hash);
     await mkdir(dirname(f),{recursive:true});
     await writeFile(f,bytes);
     return bytes;
-  }};
+  };
+  return {...frames,
+    ...(frames.voice?{voice:keep('voicetrack',frames.voice)}:{}),
+    ...(frames.levels?{levels:keep('levels',frames.levels)}:{})};
 }
 
 /**
