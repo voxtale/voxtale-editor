@@ -2,9 +2,9 @@
 # usage: run-task.sh <id> <kind: seq|asm|rep>
 set -u
 id=$1; kind=$2
-REPO=/Users/zokov/code/super-tale
-B=$REPO/data/generate/_bench/agenticvbench
-S=/private/tmp/claude-501/-Users-zokov-code-super-tale/263aa54c-693e-4781-ab67-e9ca1c8f8f85/scratchpad/bench
+REPO=${REPO:-$(cd "$(dirname "$0")/../../.." && pwd)}
+B=${AGENTICVBENCH:-$REPO/data/generate/_bench/agenticvbench}
+S=${BENCH_SCRATCH:-$REPO/data/generate/_bench/scratch}
 W=$HOME/bench-ours/$id; R=$B/results/ours/$id
 rm -rf "$W"; mkdir -p "$W" "$R"
 cp $B/tasks/$id/materials/*.mp4 "$W/"
@@ -63,7 +63,7 @@ echo "[$(date +%H:%M:%S)] child exit $? $id" >> $S/driver.log
 cp -R "$W/.edit/edit.json" $R/edit.json 2>/dev/null
 [ -f "$W/final.mp4" ] && cp "$W/final.mp4" $R/solution.mp4
 if [ "$kind" != rep ] && [ -f $R/solution.mp4 ]; then
-  bun $S/sol.ts $R/edit.json $B/tasks/$id/materials $R/solution.mp4 $R/solution.json $kind > $R/convert.log 2>&1
+  bun $REPO/bench/agenticvbench/ours/sol.ts $R/edit.json $B/tasks/$id/materials $R/solution.mp4 $R/solution.json $kind > $R/convert.log 2>&1
   $REPO/.venv/bin/python -I $B/judges/$id/judge.py --solution $R/solution.json --solution-mp4 $R/solution.mp4 \
     --materials-dir $B/tasks/$id/materials --reward-json $R/reward.json --reward-txt $R/reward.txt > $R/judge.log 2>&1
   echo "[$(date +%H:%M:%S)] judged $id: $(cat $R/reward.txt 2>/dev/null)" >> $S/driver.log

@@ -1,7 +1,7 @@
-// Wrapper over experiments/agenticvbench/to-solution.ts: for Assembly tasks the
+// Wrapper over ../to-solution.ts: for Assembly tasks the
 // expected set is the picked clips, not every clip in materials.
 import {readFileSync,readdirSync,writeFileSync} from 'node:fs';
-import {toSolution} from '/Users/zokov/code/super-tale/experiments/agenticvbench/to-solution.ts';
+import {toSolution} from '../to-solution.ts';
 const [editJson,materials,mp4,out,mode]=process.argv.slice(2);
 const doc=JSON.parse(readFileSync(editJson!,'utf8'));
 const all=readdirSync(materials!).filter(f=>/^\d+\.mp4$/.test(f)).map(f=>f.replace('.mp4','')).sort((a,b)=>+a-+b);

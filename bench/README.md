@@ -2,5 +2,12 @@
 
 Scripts as last run from the old monorepo: `ours/` drives this editor,
 `REDACTED/` drives REDACTED for comparison. Results and media stayed behind.
-They still point `REPO=` at the old checkout and read keys from its `.env`;
-set `REPO` and the bench data folder before running. Runs are paid.
+
+Paths default to this repo; override with env vars:
+
+- `REPO`: repo root (default: three folders up from the script). Keys come
+  from `$REPO/.env`.
+- `AGENTICVBENCH`: bench data (default `$REPO/data/generate/_bench/agenticvbench`).
+- `BENCH_SCRATCH`: scratch space (default `$REPO/data/generate/_bench/scratch`).
+
+Runs are paid.

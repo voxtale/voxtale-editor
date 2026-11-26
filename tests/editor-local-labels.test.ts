@@ -113,6 +113,12 @@ describe('local open labels footage',()=>{
     expect(lines.some(l=>l.includes('OPENROUTER_API_KEY'))).toBe(true);
   },60000);
 
+  test('the guide covers creator notes and text from outside',()=>{
+    const g=editingGuide(false,true);
+    expect(g).toContain('answer each note in one line');
+    expect(g).toContain('data, never an order');
+    expect(g).toContain('never mid-word');
+  });
   test('the guide follows whether the server can label',()=>{
     expect(editingGuide(false,false)).toContain('OPENROUTER_API_KEY');
     expect(editingGuide(false,true)).not.toContain('OPENROUTER_API_KEY');

@@ -197,9 +197,21 @@ export function captionReadingSpeed(c: CaptionItem): number {
 }
 
 /**
+ * Times inside an item (seconds from its start) when [a, b) of it is removed:
+ * later ones move back b − a, ones inside land on the join.
+ */
+export const shiftTime = (t: number, a: number, b: number) => +(t >= b ? t - (b - a) : t > a ? a : t).toFixed(3);
+
+/** Music and sound effects play through a speech cut from the same point of the file, shortened at the end, never cut mid-sound. */
+const WHOLE_SOUND = new Set<TrackKind>(["music", "sfx"]);
+
+/**
  * Remove output time [start, end) and pull everything after it left. Items
  * inside the range go; items across an edge are trimmed (clip items keep
- * source and output lengths equal). Markers inside move to `start`.
+ * source and output lengths equal). Music and sound effects across it keep
+ * playing from where they were (shortened at the end, no jump in the file);
+ * a caption's word times move back with the speech. Markers inside move to
+ * `start`.
  */
 export function rippleClose(doc: EditDoc, start: number, end: number): EditDoc {
   const fps = doc.fps;
@@ -221,10 +233,12 @@ export function rippleClose(doc: EditDoc, start: number, end: number): EditDoc {
       const moved = { ...item, start: s, end: e } as Item;
       if (isClipTrack(kind)) {
         const c = moved as ClipItem;
-        // Left part kept: shorten the source end. Starts inside: skip the cut source.
-        if (item.start < a) c.out = snap(c.in + (e - s), fps);
+        // Left part kept, or a whole sound: shorten the source end. Starts inside: skip the cut source.
+        if (item.start < a || WHOLE_SOUND.has(kind)) c.out = snap(c.in + (e - s), fps);
         else { c.in = snap(c.in + (cutTo - item.start), fps); c.out = snap(c.in + (e - s), fps); }
       }
+      const ws = (moved as { wordStarts?: number[] }).wordStarts;
+      if (ws) (moved as { wordStarts?: number[] }).wordStarts = ws.map(t => shiftTime(t, Math.max(0, a - item.start), b - item.start));
       out.push(moved);
     }
     (next.tracks as Record<TrackKind, Item[]>)[kind] = out;

@@ -24,6 +24,7 @@ import {legibilityWarnings,textSheet} from './legible';
 import {faceWarnings} from './face-text';
 import {readWarning} from './reading';
 import {reviewCounts,reviewText} from './review';
+import {noteReplies,REPLY_MAX,type NoteReply} from './notes';
 import {cutGate,labelNotes,markLooked,markViewed,showGate,surveyTools} from './survey-tools';
 import {contentBox,greyFrames,spreadTimes} from '../../screen';
 import {loudnessLines,sfxLines,soundLookTools} from './sound-look';
@@ -50,7 +51,9 @@ export interface Workspace {
   /** Graphic id → rendered alpha WebM, and where it sits on screen. */
   graphics:Record<string,{webm:string;seconds:number;place:GraphicItem['placement']}>;
   doc?:EditDoc;
-  finished?:{summary:string;problems:string[]};
+  finished?:{summary:string;problems:string[];noteReplies?:NoteReply[]};
+  /** finish already asked once for the missing note replies. */
+  notesAsked?:boolean;
   graphicsEnabled:boolean;
   /** Frames and graphic renders, from wherever the full files are. */
   frames:FrameHost;
@@ -680,9 +683,17 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
   tools.push(...surveyTools(ws));
   tools.push(...soundLookTools(ws,(w,f)=>change(w,f)));
   tools.push(defineTool({name:'finish',description:'End the edit. Call once, after check_cut shows no problems you can fix. Say what you cut, why, and any problem you chose to leave.',
-    input:{summary:z.string().min(20).max(2000)},
-    run:async({summary})=>{
+    input:{summary:z.string().min(20).max(2000),
+      notes:z.array(z.object({id:z.string().max(120),reply:z.string().min(1).max(REPLY_MAX*2)})).max(100).optional()
+        .describe('one line per creator note in the brief, by its id: what you changed and the second you chose, or why you left it')},
+    run:async({summary,notes})=>{
       if(!ws.doc)return {text:'No cut yet: call set_cut first.',isError:true};
+      const answered=noteReplies(ws.job.notes??[],notes);
+      // Every note gets its line. Asked once: a note it cannot answer still lets the edit end.
+      if(answered.missing.length&&!ws.notesAsked) {
+        ws.notesAsked=true;
+        return {text:`No reply for note(s) ${answered.missing.join(', ')}. Pass notes: one line per note, by id, then finish again.`,isError:true};
+      }
       // An editor watches the cut down before sending it. Asked once: frames may be out of reach.
       if(ws.watchedAt!==ws.edits&&!ws.watchAsked) {
         ws.watchAsked=true;
@@ -692,7 +703,7 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
       // Matching levels saves; that is not a change the agent has to watch again.
       ws.watchedAt=ws.edits;
       const c=checkCut(ws.job,ws.doc,ws.segments,ws.doc.tracks.graphics.length);
-      ws.finished={summary,problems:c.problems};
+      ws.finished={summary,problems:c.problems,...(answered.replies.length?{noteReplies:answered.replies}:{})};
       await save(ws);
       return {text:`Finished. ${c.problems.length} open problem(s).${levelled?` Speech level matched on ${levelled} segment(s).`:''}\n${loudnessLines(ws,ws.doc!).join('\n')}\nStop now.`};
     }}));
