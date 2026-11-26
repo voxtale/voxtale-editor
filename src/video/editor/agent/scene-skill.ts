@@ -186,3 +186,10 @@ For each scene: one at the arrival, one holding, one at the text exit.
 - Nothing smooth: no soft edge, no continuous gradient, no smoothed letter.
 - Every number and letter reads (C and O, 3 and 8).
 - Text touches neither the subject nor the app-UI zones.`;
+
+/** Text behind the speaker (place_graphic behindSubject). */
+export const BEHIND_SUBJECT_SKILL_TEXT = `## Text behind the speaker
+- place_graphic with behindSubject: true cuts the speaker out at export and draws them over the graphic: a big word that sits behind the head.
+- Use it on a full-frame graphic that is see-through around its text, with the text large and partly behind the speaker, never so far behind that the word stops reading. Once or twice a video, on a line that matters.
+- Not over b-roll (the speaker is not on screen there) or a pip shot.
+- Needs the subject mask model; without it the graphic is drawn over the speaker and the render reports it. The stills you check do not show the cut-out: judge the overlap from the speaker's place in the frame.`;
