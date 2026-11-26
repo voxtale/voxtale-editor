@@ -32,6 +32,15 @@ export const templateSchema=z.discriminatedUnion('kind',[
     sub:z.string().max(80).optional(),subWord:beat.optional()}),
   z.object({kind:z.literal('flow'),place:z.enum(['lower','top','full']).default('lower'),kicker:z.string().max(40).optional(),
     steps:z.array(z.object({text:z.string().min(1).max(24),word:beat})).min(2).max(4)}),
+  z.object({kind:z.literal('marked'),place:place.default('lower'),kicker:z.string().max(40).optional(),
+    text:z.string().min(1).max(60).describe('the headline, up to ~6 words'),
+    mark:z.number().int().min(0).max(9).describe('which word of text to underline, 0 = first'),word:beat.optional().describe('spoken word the stroke lands on')}),
+  z.object({kind:z.literal('chapter'),place:z.literal('center').default('center').describe('always over the speaker; it parks in corner'),corner:z.enum(['top-left','top-right']).default('top-left'),kicker:z.string().max(40).optional().describe('e.g. "Part 2"'),
+    text:z.string().min(1).max(40).describe('the section title, short, sentence case'),word:beat.optional().describe('spoken word where it leaves for the corner')}),
+  z.object({kind:z.literal('cards'),place:z.enum(['left','right','center']).default('center'),kicker:z.string().max(40).optional(),
+    cards:z.array(z.string().min(1).max(32)).min(3).max(8).describe('short examples, one per card'),word:beat.optional().describe('spoken word the first card lands on')}),
+  z.object({kind:z.literal('beatWords'),place:place.default('lower'),
+    words:z.array(z.object({text:z.string().min(1).max(20),word:beat})).min(2).max(8).describe('the line, one entry per word; each lights on its spoken word')}),
 ]);
 export type Template=z.infer<typeof templateSchema>;
 
@@ -71,6 +80,23 @@ const CSS=`
 .step{display:flex;align-items:center;gap:calc(var(--u)*16);font-size:calc(var(--u)*46);font-weight:700;white-space:nowrap}
 .link{position:relative;width:calc(var(--u)*90);height:calc(var(--u)*6);margin:0 calc(var(--u)*22);border-radius:calc(var(--u)*3);background:rgba(255,255,255,.15);overflow:hidden}
 .link>i{position:absolute;inset:0;background:var(--accent);transform-origin:0 50%}
+/* from REDACTED RECIPES.md §2: felt-pen stroke under the word, 0.12 em thick, slanted like italic. */
+.mk{position:relative;display:inline-block}
+.pen{position:absolute;left:-4%;width:108%;bottom:-.14em;height:.32em;transform:skewX(-10deg);overflow:visible;filter:drop-shadow(0 0 calc(var(--u)*10) var(--accent))}
+.pen path{fill:none;stroke:var(--accent);stroke-width:.12em;stroke-linecap:round;vector-effect:non-scaling-stroke}
+/* from REDACTED RECIPES.md §3: the title parks in a corner as a label. */
+.chap{position:absolute;top:calc(var(--u)*48);display:flex;flex-direction:column;gap:calc(var(--u)*10)}
+.chap.top-left{left:calc(var(--u)*60);transform-origin:0 0}
+.chap.top-right{right:calc(var(--u)*60);transform-origin:100% 0;align-items:flex-end}
+.chap .kt{max-width:none;flex-wrap:nowrap;text-shadow:0 calc(var(--u)*4) calc(var(--u)*24) rgba(0,0,0,.55)}
+/* from REDACTED RECIPES.md §5: a pile of cards. */
+.pile{position:absolute;top:50%;width:calc(var(--u)*620);height:calc(var(--u)*300);transform:translateY(-50%)}
+.pile.center{left:calc(50% - var(--u)*310)}.pile.left{left:calc(var(--u)*110)}.pile.right{right:calc(var(--u)*110)}
+.pile .kicker{position:absolute;top:calc(var(--u)*-70);left:0}
+.card{position:absolute;inset:0;border-radius:calc(var(--u)*26);background:#f5f6fa;color:#0c0e14;display:grid;place-items:center;padding:calc(var(--u)*30);
+  font-size:calc(var(--u)*52);font-weight:800;text-align:center;box-shadow:0 calc(var(--u)*18) calc(var(--u)*50) rgba(0,0,0,.4)}
+/* from REDACTED RECIPES.md §9: each word lights on its beat; nothing moves. */
+.beat{display:flex;flex-wrap:wrap;column-gap:.28em;font-size:calc(var(--u)*72);font-weight:800;max-width:calc(var(--u)*1400)}
 /* Beside the speaker, wide layouts stack. */
 .side.cmp{flex-direction:column;gap:calc(var(--u)*22)}
 .side.cmp .vs{align-self:flex-start;width:calc(var(--u)*64);height:calc(var(--u)*64);font-size:calc(var(--u)*30)}
@@ -225,6 +251,61 @@ export function templateHtml(t0:Template,o:{width:number;height:number;seconds:n
         if(i)js.push(`tl.fromTo('#l${i}',{${side?'scaleY':'scaleX'}:0},{${side?'scaleY':'scaleX'}:1,duration:1.2,ease:kit.snapEase(1.2)},${f(Math.max(.4,s-.35))})`);
         js.push(`tl.to('#s${i}',{opacity:1,duration:.3,ease:kit.curves.moderate},${f(s)})`,
           `tl.fromTo('#n${i}',{scale:.5},{scale:1,duration:1.2,ease:kit.snapEase(1.2)},${f(s)})`);
+      });
+      break;
+    }
+    case 'marked': {
+      const words=t.text.split(/\s+/).filter(Boolean),mk=Math.min(t.mark,words.length-1);
+      const room=(side?sideRoom(p as 'left'|'right',o.face)*1920:p==='full'?1500/FULL_SCALE:1500)-PANEL_PAD;
+      const size=Math.round(Math.min(80,room/(0.62*Math.max(...words.map(w=>w.length)))));
+      body=`<div class="panel ${t.place}" id="g" style="--kt:calc(var(--u)*${size})"><div class="edge"></div>${kicker(t.kicker)}`
+        +`<div class="title kt">${words.map((w,i)=>{const m=`<span class="mask"><span id="w${i}">${esc(w)}</span></span>`;
+          return i===mk?`<span class="mk">${m}<svg class="pen" viewBox="0 0 100 12" preserveAspectRatio="none"><path id="pen" d="M2 8 C 22 5, 45 10, 66 6 S 92 5, 98 7" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg></span>`:m;}).join('')}</div></div>`;
+      open();
+      words.forEach((_,i)=>js.push(`tl.fromTo('#w${i}',{yPercent:115},{yPercent:0,duration:.55,ease:kit.curves.moderate},${f(.35+i*.08)})`));
+      const landed=.35+words.length*.08+.55+6/24;
+      js.push(`tl.to('#pen',{strokeDashoffset:0,duration:.33,ease:kit.curves.glide},${f(Math.max(landed,at(t.word,landed)))})`);
+      break;
+    }
+    case 'chapter': {
+      // corner and shrinks it to a label about 48 px tall at 1080 (never under ~32 px).
+      const words=t.text.split(/\s+/).filter(Boolean);
+      const size=Math.round(Math.min(110,1500/(0.62*Math.max(4,t.text.length*0.9))));
+      const label=Math.max(0.3,Math.min(0.6,48/size));
+      body=`<div class="chap ${t.corner}" id="g" style="--kt:calc(var(--u)*${size})">${kicker(t.kicker)}`
+        +`<div class="title kt" id="tt">${words.map((w,i)=>`<span class="mask"><span id="w${i}">${esc(w)}</span></span>`).join('')}</div></div>`;
+      const reveal=.2+Math.min(.9,words.length*.12)+.5,leave=Math.min(Math.max(reveal+.6,at(t.word,reveal+.6)),end-1.2);
+      js.push(`var R=document.getElementById('root').getBoundingClientRect(),G=document.getElementById('g').getBoundingClientRect()`,
+        `tl.set('#g',{x:R.left+(R.width-G.width)/2-G.left,y:R.top+(R.height-G.height)/2-G.top})`,
+        `tl.fromTo('#g',{opacity:0},{opacity:1,duration:.15},0)`,
+        `tl.fromTo('#k',{opacity:0},{opacity:1,duration:.3,ease:kit.curves.moderate},.1)`);
+      words.forEach((_,i)=>js.push(`tl.fromTo('#w${i}',{yPercent:100,opacity:0},{yPercent:0,opacity:1,duration:.5,ease:kit.curves.moderate},${f(.2+i*.12)})`));
+      js.push(`tl.to('#g',{x:0,y:0,scale:${f(label)},duration:.95,ease:kit.curves.swing},${f(leave)})`);
+      break;
+    }
+    case 'cards': {
+      // the gap tightens from 0.27 s to 0.1 s like a deal speeding up, then everything holds still >= 0.5 s.
+      const n=t.cards.length,trip=1;
+      body=`<div class="pile ${t.place}" id="g">${kicker(t.kicker)}${t.cards.map((c,i)=>`<div class="card" id="c${i}" style="transform:rotate(${((i*37)%11-5)*.9}deg)">${esc(c)}</div>`).join('')}</div>`;
+      let s=Math.min(at(t.word,.3),Math.max(.3,end-trip-.5-.27*n));
+      js.push(`tl.fromTo('#k',{opacity:0},{opacity:1,duration:.3,ease:kit.curves.moderate},.1)`);
+      t.cards.forEach((_,i)=>{
+        js.push(`tl.fromTo('#c${i}',{opacity:0},{opacity:1,duration:.08},${f(s)})`,
+          `tl.fromTo('#c${i}',{x:${t.place==='left'?-1100:1100}},{x:0,duration:${trip},ease:kit.curves.flowIn},${f(s)})`,
+          `tl.fromTo('#c${i}',{y:420},{y:0,duration:${trip},ease:kit.curves.glide},${f(s)})`);
+        s+=.27-(.17*i)/Math.max(1,n-2);
+      });
+      break;
+    }
+    case 'beatWords': {
+      // no overshoot); a beat closer than that returns faster so the line never shivers. Nothing moves.
+      const times=t.words.map((w,i)=>at(w.word,.5+i*.4));
+      body=`<div class="panel ${t.place}" id="g"><div class="edge"></div><div class="beat">${t.words.map((w,i)=>`<span id="b${i}">${esc(w.text)}</span>`).join('')}</div></div>`;
+      open();
+      js.push(`var acc=getComputedStyle(document.getElementById('root')).getPropertyValue('--accent').trim()||'#5eb0ff'`);
+      times.forEach((s,i)=>{
+        const gap=i+1<times.length?times[i+1]!-s:1,back=Math.max(.15,Math.min(14/24,gap-1/24));
+        js.push(`tl.fromTo('#b${i}',{color:acc,textShadow:'0 0 18px '+acc},{color:'#fff',textShadow:'0 0 0px rgba(0,0,0,0)',duration:${f(back)},ease:kit.curves.glide,immediateRender:false},${f(s)})`);
       });
       break;
     }

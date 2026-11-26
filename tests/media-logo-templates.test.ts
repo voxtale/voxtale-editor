@@ -90,3 +90,43 @@ describe('brand logo on the cut (jo6.1)',async()=>{
     expect(checkEditDoc(bad).some(i=>/Logo/.test(i.message))).toBe(true);
   });
 });
+
+describe('templates ported from REDACTED',async()=>{
+  const {templateHtml,templateSchema}=await import('../src/video/editor/agent/templates');
+  const at=(w:number|undefined,fb:number)=>w===undefined?fb:w*0.4;
+  const html=(t:unknown,face?:{x:number;y:number;w:number;h:number})=>templateHtml(templateSchema.parse(t),{width:1920,height:1080,seconds:6,at,...(face?{face}:{})});
+  it('each new kind parses, uses the kit and fades out',()=>{
+    for(const t of [{kind:'marked',text:'Ship the boring version',mark:2,word:3},{kind:'chapter',kicker:'Part 2',text:'Why it works'},
+      {kind:'cards',cards:['Invoices','Receipts','Contracts']},{kind:'beatWords',words:[{text:'Plan',word:1},{text:'Ship',word:2},{text:'Repeat',word:3}]}]) {
+      const h=html(t);
+      expect(h).toContain('kit.curves.');
+      expect(h).not.toMatch(/ease:'(power|back)/);
+      expect(h).toMatch(/tl\.to\('#g',\{opacity:0/);
+    }
+  });
+  it('marked draws its stroke under the chosen word only',()=>{
+    const h=html({kind:'marked',text:'Ship the boring version',mark:2});
+    expect(h.match(/class="pen"/g)?.length).toBe(1);
+    expect(h).toMatch(/<span class="mk"><span class="mask"><span id="w2">boring/);
+  });
+  it('chapter parks in its corner, shrunk to a readable label',()=>{
+    const h=html({kind:'chapter',corner:'top-right',text:'Why it works'});
+    expect(h).toContain('chap top-right');
+    const scale=Number(h.match(/scale:([\d.]+),duration:\.95,ease:kit\.curves\.swing/)?.[1]);
+    expect(scale).toBeGreaterThanOrEqual(0.3);
+    expect(scale).toBeLessThanOrEqual(0.6);
+  });
+  it('cards are dealt faster and faster',()=>{
+    const h=html({kind:'cards',cards:['a','b','c','d','e']});
+    const starts=[...h.matchAll(/tl\.fromTo\('#c\d',\{x:-?\d+\},\{x:0,duration:1,ease:kit\.curves\.flowIn\},([\d.]+)\)/g)].map(m=>Number(m[1]));
+    expect(starts.length).toBe(5);
+    const gaps=starts.slice(1).map((s,i)=>s-starts[i]!);
+    expect(gaps[0]!).toBeGreaterThan(gaps.at(-1)!);
+    expect(gaps.at(-1)!).toBeGreaterThanOrEqual(0.09);
+  });
+  it('beatWords lights each word on its spoken word',()=>{
+    const h=html({kind:'beatWords',words:[{text:'Plan',word:2},{text:'Ship',word:4}]});
+    expect(h).toMatch(/'#b0'.*immediateRender:false\},0\.80\)/);
+    expect(h).toMatch(/'#b1'.*immediateRender:false\},1\.60\)/);
+  });
+});
