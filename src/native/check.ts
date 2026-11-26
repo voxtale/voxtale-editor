@@ -11,12 +11,22 @@ import {PYTHON,REPO_ROOT} from './bridge';
 export const FACE_MODEL='face_detection_yunet_2023mar.onnx';
 export const SUBJECT_MODEL='u2netp.onnx';
 export const PIXEL_FONT='PixelifySans-Regular.ttf';
+/** Optional, not in git (tools/fetch-object-model.sh): pick_object and objects in the subject mask. */
+export const OBJECT_MODELS=['mobile_sam_image_encoder.onnx','sam_mask_decoder_single.onnx'] as const;
+
+/** Both object model files are in models/ (or where VOXTALE_OBJECT_ENCODER / _DECODER point). */
+export function objectModel(root=REPO_ROOT):boolean {
+  const enc=process.env.VOXTALE_OBJECT_ENCODER??join(root,'models',OBJECT_MODELS[0]),dec=process.env.VOXTALE_OBJECT_DECODER??join(root,'models',OBJECT_MODELS[1]);
+  return existsSync(enc)&&existsSync(dec);
+}
 
 export interface NativeCheck {
   /** The venv runs and imports cv2 and numpy. */
   python:boolean;
   faceModel:boolean;
   subjectModel:boolean;
+  /** Optional object model (pick_object); never in `missing`, as the editor works without it. */
+  objectModel:boolean;
   /** Pixelify Sans in the fonts folder (undefined: no fonts folder given). */
   pixelFont?:boolean;
   /** One line per missing piece, with what it costs; empty when all is there. */
@@ -40,7 +50,7 @@ export async function checkNatives(o:CheckOptions={}):Promise<NativeCheck> {
   if(!faceModel)missing.push(`models/${FACE_MODEL}: no face finder (zooms aim at the middle)`);
   if(!subjectModel)missing.push(`models/${SUBJECT_MODEL}: no subject mask (text goes over the speaker, not behind)`);
   if(pixelFont===false)missing.push(`fonts/${PIXEL_FONT}: pixel-art graphics fall back to Inter`);
-  return {python:ok,faceModel,subjectModel,...(pixelFont!==undefined?{pixelFont}:{}),missing};
+  return {python:ok,faceModel,subjectModel,objectModel:objectModel(root),...(pixelFont!==undefined?{pixelFont}:{}),missing};
 }
 
 /** The warning the server prints and hands the agent; empty when nothing is missing. */

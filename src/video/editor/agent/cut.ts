@@ -105,7 +105,9 @@ export interface GraphicPlacement {id:string;clip:string;word:number;seconds:num
   /** Other rendered graphics to try here. */
   variants?:{id:string;placement?:GraphicItem['placement']}[];
   /** Text behind the speaker: the a-roll's subject is drawn back over it (needs the subject mask model). */
-  behindSubject?:boolean}
+  behindSubject?:boolean;
+  /** Objects picked on a still (pick_object), added to that mask or cut out of it. */
+  maskObjects?:{mode:'add'|'remove';clip:string;t:number;points?:[number,number][];exclude?:[number,number][];box?:[number,number,number,number]}[]}
 /**
  * Footage over the voice: clip `broll` from `in` for `seconds`, starting on a
  * spoken word. `sync`: `broll` was recorded with the speaking clip, so it
@@ -543,6 +545,7 @@ function placeGraphics(job:Job,doc:EditDoc,gs:GraphicPlacement[]):GraphicItem[] 
     if(stop<=start)continue;
     out.push({id:`g-${g.id}`,assetId:g.shows??g.id,assetRevision:0,start,end:stop,owner:'agent',stage:'agent',
       status:'applied',placement:g.placement??'full',...fadeFields(g.fade,stop-start),...(g.behindSubject?{behindSubject:true}:{}),
+      ...(g.maskObjects?.length?{maskObjects:g.maskObjects.map(({clip,...o})=>({...o,clipId:clip}))}:{}),
       ...(g.variants?.length?{variants:g.variants.map(v=>({assetId:v.id,assetRevision:0,...(v.placement?{placement:v.placement}:{})}))}:{}),reason:g.reason.slice(0,300),evidence:[{kind:'word',ref:`${g.clip}:${g.word}`}]});
   }
   return out.sort((a,b)=>a.start-b.start);

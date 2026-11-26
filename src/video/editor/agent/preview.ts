@@ -8,6 +8,11 @@ import {join} from 'node:path';
 import {pipBox,zoomAt,type EditDoc} from '@voxtale/editdoc';
 import type {FrameHost} from './frames';
 
+/** A still's mask: the person (subject) plus or minus picked objects (fractions of the still). */
+export interface StillMask {subject:boolean;objects:{mode:'add'|'remove';points?:[number,number][];exclude?:[number,number][];box?:[number,number,number,number]}[]}
+/** Masks a still to `out` (greyscale PNG, white = drawn back over the graphic); the person alone without `mask`. */
+export type Cutout=(still:string,out:string,mask?:StillMask)=>Promise<boolean>;
+
 type Box={x:number;y:number;width:number;height:number};
 
 export interface PreviewLayer {
@@ -29,7 +34,9 @@ export interface PreviewShot {
   t:number;
   layers:PreviewLayer[];
   /** Rendered overlays up at `t`, with the second into each; behind: the speaker is drawn back over it. */
-  graphics:{webm:string;t:number;behind?:boolean}[];
+  graphics:{webm:string;t:number;behind?:boolean;
+    /** What goes back over it, when picked objects shape the mask: the person (subject) and the objects on this clip. */
+    mask?:StillMask}[];
   /** Brand logos up at `t`, drawn last: the image file, top-left and width as fractions of the canvas. */
   logos?:{file:string;x:number;y:number;w:number;opacity:number}[];
   /** What is on screen and in the mix, in words. */
@@ -80,8 +87,11 @@ export function previewShots(doc:EditDoc,times:number[],hashOf:(clipId:string)=>
     }
     for(const g of on(doc.tracks.graphics,t)) {
       const webm=webmOf(g.assetId);
-      if(webm)graphics.push({webm,t:t-g.start,...(g.behindSubject&&speaker?{behind:true}:{})});
-      notes.push(`graphic ${g.assetId} (${g.placement}${g.behindSubject?', behind the speaker':''}${webm?'':', not drawn'})`);
+      const objects=(g.maskObjects??[]).filter(o=>a&&o.clipId===a.clipId).map(({clipId:_,t:__,...o})=>o);
+      const behind=!!speaker&&(!!g.behindSubject||objects.some(o=>o.mode==='add'));
+      if(webm)graphics.push({webm,t:t-g.start,...(behind?{behind:true}:{}),...(behind&&objects.length?{mask:{subject:!!g.behindSubject,objects}}:{})});
+      const what=g.behindSubject?(objects.length?', behind the speaker and picked objects':', behind the speaker'):objects.some(o=>o.mode==='add')?', behind picked objects':'';
+      notes.push(`graphic ${g.assetId} (${g.placement}${what}${webm?'':', not drawn'})`);
     }
     const logos:NonNullable<PreviewShot['logos']>=[];
     for(const l of (doc.logos??[]).filter(l=>kind.get(l.clipId)==='image'&&l.start<=t+1e-6&&t<l.end-1e-6)) {
@@ -106,7 +116,7 @@ const even=(x:number)=>Math.max(2,Math.round(x/2)*2);
  * does. Without it, or when it fails, the graphic stays on top.
  */
 export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;height:number};frames:FrameHost;dir:string;ff:(args:string[])=>Promise<void>;width?:number;
-  cutout?:(still:string,out:string)=>Promise<boolean>}):Promise<Uint8Array> {
+  cutout?:Cutout}):Promise<Uint8Array> {
   const {shots,canvas,ff}=o;
   if(!shots.length)throw new Error('nothing to preview');
   await mkdir(o.dir,{recursive:true});
@@ -128,9 +138,10 @@ export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;he
     }));
   }));
   const masks=new Map<string,string|null>();
-  const maskOf=async(file:string):Promise<string|null>=>{
-    if(!masks.has(file)){const m=file.replace(/\.jpg$/,'-mask.png');masks.set(file,o.cutout&&await o.cutout(file,m).catch(()=>false)?m:null);}
-    return masks.get(file)!;
+  const maskOf=async(file:string,mask?:StillMask):Promise<string|null>=>{
+    const key=mask?`${file}#${JSON.stringify(mask)}`:file;
+    if(!masks.has(key)){const m=file.replace(/\.jpg$/,`-mask${mask?`-${masks.size}`:''}.png`);masks.set(key,o.cutout&&await o.cutout(file,m,mask).catch(()=>false)?m:null);}
+    return masks.get(key)!;
   };
   for(const [i,s] of shots.entries()) {
     const inputs=['-f','lavfi','-i',`color=black:s=${cw}x${ch}`];
@@ -168,7 +179,7 @@ export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;he
     // Text behind the speaker: the full-frame speaker layer, cut out, back on top.
     const speaker=s.graphics.some(g=>g.behind)?s.layers.find(l=>!l.box):undefined;
     const sf=speaker&&still.get(`${speaker.clip}@${speaker.t}`);
-    const mask=sf?await maskOf(sf):null;
+    const mask=sf?await maskOf(sf,s.graphics.find(g=>g.behind&&g.mask)?.mask):null;
     if(speaker&&sf&&mask) {
       const p=place(speaker);
       inputs.push('-i',sf,'-i',mask);
@@ -176,7 +187,7 @@ export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;he
         `[s${idx}][m${idx}]alphamerge,format=rgba,${p.vf}[l${idx}]`,`[${last}][l${idx}]overlay=${p.x}:${p.y}[o${idx}]`);
       last=`o${idx}`;
       idx+=2;
-      s.notes.push('speaker cut out over the graphic');
+      s.notes.push(s.graphics.some(g=>g.mask)?'mask (speaker and picked objects) cut out over the graphic':'speaker cut out over the graphic');
     }
     // The brand logo over everything so far, its own shape and see-through kept, as the render draws it.
     for(const l of s.logos??[]) {

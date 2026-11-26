@@ -11,7 +11,7 @@ import {join} from 'node:path';
 import {
   CAPTION_DIM,CAPTION_POP,captionLook,captionPlacement,captionText,captionWords,cutFade,dbToVolume,duckPoints,lanes,limiterCeiling,loudnessGain,mixSpeech,parseLoudness,
   shown,textContent,toSrt,textLook,textPosition,pipBox,transitionJoins,zoomKeysBetween,
-  SETTLE_BACK,splitBoxes,companionSources,speechSounds,clipLut,parseCube,pictureSource,writeCube,LUT_SIZE,type Easing,type EditDoc,type LoudnessLevel,type ZoomKey,type ZoomProperty,
+  SETTLE_BACK,splitBoxes,companionSources,speechSounds,clipLut,parseCube,pictureSource,writeCube,LUT_SIZE,type Easing,type EditDoc,type LoudnessLevel,type MaskObject,type ZoomKey,type ZoomProperty,
 } from '@voxtale/editdoc';
 import {run} from './media';
 import {writeLibrary} from './sfx';
@@ -89,7 +89,12 @@ export interface RenderEditResult {
   /** Items drawn or heard other than asked: a graphic still rendering, its subject mask missing, an angle/mic/companion that does not cover the piece (master used). */
   skipped:{itemId:string;reason:'graphic-not-ready'|'subject-mask-missing'|'angle-out-of-range'|'mic-out-of-range'|'companion-out-of-range'}[];
 }
-export type SubjectMasker=(o:{video:string;start:number;end:number;fps:number;out:string})=>Promise<boolean>;
+/**
+ * Request for one mask video. `subject` (default true): the person mask is the base; `objects`: picked objects added to it
+ * or cut out of it (MaskObject with its clip dropped; `t` is a source second of the same clip).
+ */
+export interface SubjectMaskRequest {video:string;start:number;end:number;fps:number;out:string;subject?:boolean;objects?:Omit<MaskObject,'clipId'>[]}
+export type SubjectMasker=(o:SubjectMaskRequest)=>Promise<boolean>;
 
 export class MissingMediaError extends Error {
   constructor(readonly clips:string[]) {super(`Missing media for ${clips.length} clip(s): ${clips.join(', ')}`);}
@@ -166,7 +171,11 @@ export {splitBoxes};
 /** A mask video whose frame 0 shows source second `in`. */
 export interface SubjectMask {path:string;in:number}
 /** A piece of a-roll a behindSubject graphic covers, and the source seconds its mask must span (in the clip shown: the angle on multicam). */
-export interface SubjectSpan {key:string;graphicId:string;arollId:string;clipId:string;start:number;end:number;srcStart:number;srcEnd:number}
+export interface SubjectSpan {key:string;graphicId:string;arollId:string;clipId:string;start:number;end:number;srcStart:number;srcEnd:number;
+  /** The person mask is the base (behindSubject); false: the added objects alone. */
+  subject:boolean;
+  /** Picked objects on this clip, added to or cut out of the mask. */
+  objects:Omit<MaskObject,'clipId'>[]}
 
 /**
  * Where the speaker goes back over a graphic: each behindSubject graphic against each shown a-roll piece under it,
@@ -176,9 +185,12 @@ export function subjectSpans(doc:EditDoc):SubjectSpan[] {
   const cover=shown(doc.tracks['b-roll']).filter(b=>!b.pip&&b.opacity>=1).map(b=>[b.start,b.end] as const).sort((x,y)=>x[0]-y[0]);
   const out:SubjectSpan[]=[];
   for(const g of shown(doc.tracks.graphics)) {
-    if(!g.behindSubject)continue;
+    if(!g.behindSubject&&!g.maskObjects?.some(o=>o.mode==='add'))continue;
     for(const a of shown(doc.tracks['a-roll'])) {
       const src=pictureSource(doc,a);
+      const objects=(g.maskObjects??[]).filter(o=>o.clipId===src.clipId).map(({clipId:_,...o})=>o);
+      // Without the person, only objects added on this clip put anything over the graphic.
+      if(!g.behindSubject&&!objects.some(o=>o.mode==='add'))continue;
       let s=Math.max(a.start,g.start);
       const e=Math.min(a.end,g.end);
       const pieces:[number,number][]=[];
@@ -189,7 +201,7 @@ export function subjectSpans(doc:EditDoc):SubjectSpan[] {
       }
       if(s<e)pieces.push([s,e]);
       for(const [p0,p1] of pieces)if(p1-p0>1e-3)out.push({key:`${g.id}.${a.id}.${p0.toFixed(3)}`,graphicId:g.id,arollId:a.id,clipId:src.clipId,
-        start:p0,end:p1,srcStart:src.in+(p0-a.start),srcEnd:src.in+(p1-a.start)});
+        start:p0,end:p1,srcStart:src.in+(p0-a.start),srcEnd:src.in+(p1-a.start),subject:!!g.behindSubject,objects});
     }
   }
   return out;
@@ -764,7 +776,7 @@ async function writeSubjectMasks(o:RenderEditOptions,media:Record<string,string>
     const file=join(dir,`m${k}.avi`);
     // Two frames of margin each side, as the chunk inputs read past their ends.
     const start=Math.max(0,x.srcStart-2/fps);
-    if(await o.subjectMask({video,start,end:x.srcEnd+2/fps,fps,out:file}).catch(()=>false))out[x.key]={path:file,in:start};
+    if(await o.subjectMask({video,start,end:x.srcEnd+2/fps,fps,out:file,...(x.objects.length?{subject:x.subject,objects:x.objects}:{})}).catch(()=>false))out[x.key]={path:file,in:start};
   }
   return out;
 }

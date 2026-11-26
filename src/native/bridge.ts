@@ -3,6 +3,13 @@
 // the JSON response on stdout. See voxtale_native/__main__.py.
 import { join } from "node:path";
 import { spawnText, type SpawnResult } from "../spawn";
+import type { SubjectMaskRequest } from "../video/render-edit";
+
+/** What a preview still's mask holds: the person (subject) and picked objects, prompts as fractions of the still. */
+export interface StillMask { subject: boolean; objects: ObjectPrompt[] }
+export interface ObjectPrompt { mode: "add" | "remove"; points?: [number, number][]; exclude?: [number, number][]; box?: [number, number, number, number] }
+/** What the segmenter found for one prompt: share of the frame, box (fractions), its own score. */
+export interface PickedObject { mode: "add" | "remove"; area: number; box: [number, number, number, number] | null; score: number }
 
 /** The repo root: `bun run setup` makes the venv and the models here. */
 export const REPO_ROOT = join(import.meta.dir, "../..");
@@ -48,9 +55,22 @@ export async function nativeFaceFinder(jpegs: Uint8Array[]): Promise<(NativeFace
  * (voxtale_native/subject.py, U2-Net-p through cv2.dnn). False when it cannot: no model
  * (bun run setup), no Python, or a failed read; `warn` gets why.
  */
-export async function nativeSubjectMask(o: { video: string; start: number; end: number; fps: number; out: string }, warn: (why: string) => void = () => {}): Promise<boolean> {
+export async function nativeSubjectMask(o: SubjectMaskRequest, warn: (why: string) => void = () => {}): Promise<boolean> {
   try {
-    await callNative<{ out: string; frames: number }>("subject", o);
+    if (o.objects?.length) {
+      // Picked objects (voxtale_native/objects.py, MobileSAM through onnxruntime). Without that model, the plain
+      // person mask when one was asked for; nothing when the mask was the objects alone.
+      try {
+        await callNative<{ out: string; frames: number }>("objects", o);
+        return true;
+      } catch (error) {
+        const why = error instanceof Error ? error.message : String(error);
+        warn(why.includes("no-model:") ? `object model missing (tools/fetch-object-model.sh): picked objects left out of the mask` : `object mask failed: ${why.slice(0, 200)}`);
+        if (o.subject === false) return false;
+      }
+    }
+    const { objects: _, subject: __, ...plain } = o;
+    await callNative<{ out: string; frames: number }>("subject", plain);
     return true;
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error);
@@ -59,9 +79,23 @@ export async function nativeSubjectMask(o: { video: string; start: number; end: 
   }
 }
 
-/** One still's subject mask (greyscale PNG, white = subject) for preview frames; false when it cannot, as nativeSubjectMask. */
-export async function nativeSubjectStill(image: string, out: string, warn: (why: string) => void = () => {}): Promise<boolean> {
+/**
+ * One still's subject mask (greyscale PNG, white = subject) for preview frames; false when it cannot, as nativeSubjectMask.
+ * With `mask.objects`, picked objects are segmented again on this still from their prompt (not followed from their own
+ * still, so an object that moved far is missed in the preview; the export follows it).
+ */
+export async function nativeSubjectStill(image: string, out: string, warn: (why: string) => void = () => {}, mask?: StillMask): Promise<boolean> {
   try {
+    if (mask?.objects.length) {
+      try {
+        await callNative<{ out: string }>("objects_still", { image, out, subject: mask.subject, objects: mask.objects });
+        return true;
+      } catch (error) {
+        const why = error instanceof Error ? error.message : String(error);
+        warn(why.includes("no-model:") ? "object model missing (tools/fetch-object-model.sh): stills leave picked objects out" : `object mask failed: ${why.slice(0, 200)}`);
+        if (!mask.subject) return false;
+      }
+    }
     await callNative<{ out: string }>("subject_still", { image, out });
     return true;
   } catch (error) {
@@ -69,4 +103,13 @@ export async function nativeSubjectStill(image: string, out: string, warn: (why:
     warn(why.includes("no-model:") ? "subject mask model missing (tools/fetch-subject-model.sh): stills show graphics over the speaker" : `subject mask failed: ${why.slice(0, 200)}`);
     return false;
   }
+}
+
+/**
+ * Segment picked objects on one still: writes the mask PNG to `out` and an overlay JPEG (each object tinted, outlined,
+ * numbered; its points and box drawn) to `overlay`. Throws when the object model or onnxruntime is missing ("no-model:").
+ */
+export async function nativePickObjects(image: string, out: string, overlay: string, objects: ObjectPrompt[], subject = false): Promise<PickedObject[]> {
+  const r = await callNative<{ objects: PickedObject[] }>("objects_still", { image, out, overlay, objects, subject });
+  return r.objects;
 }
