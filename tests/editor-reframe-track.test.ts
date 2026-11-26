@@ -69,11 +69,11 @@ describe('reframe path',()=>{
   });
 });
 
-describe('schema v8',()=>{
+describe('schema v8+',()=>{
   it('lifts v7 and keeps reframe and track',()=>{
-    expect(EDITDOC_VERSION).toBe(8);
+    expect(EDITDOC_VERSION).toBeGreaterThanOrEqual(8);
     const d=doc();
-    expect((upgradeEditDoc({...d,version:7}) as EditDoc).version).toBe(8);
+    expect((upgradeEditDoc({...d,version:7}) as EditDoc).version).toBe(EDITDOC_VERSION);
     const clips=[{...d.clips[0]!,reframe:{speed:'faster',keys:[{t:2,x:0.4}]}}];
     const text=[{id:'t1',start:1,end:3,text:'Hi',template:'title',owner:'agent',track:{clipId:'cam',at:4,anchor:1,point:{x:0.5,y:0.5},keys:[{t:0,dx:0,dy:0}]}}];
     const back=parseEditDoc({...d,clips,tracks:{...d.tracks,text}}).doc;

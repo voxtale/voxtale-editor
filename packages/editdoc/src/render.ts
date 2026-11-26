@@ -478,3 +478,24 @@ export function splitBoxes(c: { width: number; height: number }): [{ x: number; 
   const w = Math.round(c.width / 2 / 2) * 2;
   return [{ x: 0, y: 0, width: w, height: c.height }, { x: w, y: 0, width: c.width - w, height: c.height }];
 }
+
+/**
+ * Stack layout (v9): the top band takes `split` of the canvas height, the
+ * bottom band the rest; even pixel sizes. Preview, render and export read this.
+ */
+export function stackBoxes(c: { width: number; height: number }, split: number): [{ x: number; y: number; width: number; height: number }, { x: number; y: number; width: number; height: number }] {
+  const h = Math.max(2, Math.min(c.height - 2, Math.round(c.height * split / 2) * 2));
+  return [{ x: 0, y: 0, width: c.width, height: h }, { x: 0, y: h, width: c.width, height: c.height - h }];
+}
+
+/**
+ * A source region that fills a box without stretching: the region, trimmed
+ * about its centre to the box's shape. Fractions of the source.
+ */
+export function coverRegion(src: { width: number; height: number }, r: { x: number; y: number; w: number; h: number }, box: { width: number; height: number }): { x: number; y: number; w: number; h: number } {
+  const want = box.width / box.height, have = (r.w * src.width) / (r.h * src.height);
+  let { x, y, w, h } = r;
+  if (have > want) { const nw = w * want / have; x += (w - nw) / 2; w = nw; }
+  else if (have < want) { const nh = h * have / want; y += (h - nh) / 2; h = nh; }
+  return { x, y, w, h };
+}

@@ -6,14 +6,15 @@
 // split / picture-in-picture layout, a clip's sound offset and its colour
 // space (log, HDR, input LUT), and a graphic's behindSubject (text behind
 // the speaker), all optional (`upgradeEditDoc` lifts v2-v5). v7 added
-// logos; v8 a clip's auto-reframe path and a text or graphic's motion track.
+// logos; v8 a clip's auto-reframe path and a text or graphic's motion track;
+// v9 the a-roll "stack" layout (webcam over gameplay from one picture).
 // Pure zod; no I/O. Times are seconds, frame-snapped by `validateEditDoc`.
 import { z } from "zod";
 import { fpsSchema } from "./time";
 import { cssColor, editStyleSchema, fontWeight } from "./style";
 import { gradeSchema } from "./grade";
 
-export const EDITDOC_VERSION = 8 as const;
+export const EDITDOC_VERSION = 9 as const;
 
 const id = z.string().regex(/^[A-Za-z0-9_.:~-]{1,120}$/); // "~" marks suggestion ids ("a1~r4")
 const time = z.number().finite().nonnegative();
@@ -198,7 +199,17 @@ const pictureFade = {
   fadeOut: z.number().positive().max(FADE_MAX).optional(),
 };
 
-export const A_ROLL_LAYOUTS = ["camera", "screen", "split", "pip"] as const;
+export const A_ROLL_LAYOUTS = ["camera", "screen", "split", "pip", "stack"] as const;
+const region = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0.03).max(1), h: z.number().min(0.03).max(1) }).strict()
+  .refine(r => r.x + r.w <= 1.001 && r.y + r.h <= 1.001, "region inside the frame");
+/**
+ * Stack (v9): two regions of this piece's own picture, one above the other on
+ * the canvas: a streamer's webcam on top, the game below. Regions are
+ * fractions of the source frame; `split` is the top band's share of the
+ * canvas height. Each region fills its band (cover). No companion clip.
+ */
+export const stackSchema = z.object({ top: region, bottom: region, split: z.number().min(0.15).max(0.85) }).strict();
+export type Stack = z.infer<typeof stackSchema>;
 export const aRollItemSchema = z.object({
   ...itemBase, ...clipRange,
   /**
@@ -210,6 +221,8 @@ export const aRollItemSchema = z.object({
   /** Other clips of the same take shown alongside (screen + camera): companion time = this piece's source time + offset. */
   companions: z.array(z.object({ clipId: id, offset: z.number().finite() }).strict()).max(4).optional(),
   pipCorner: z.enum(PIP_CORNERS).optional(),
+  /** layout "stack": the two regions of this picture and where they meet (v9). */
+  stack: stackSchema.optional(),
   /**
    * Picture from this member of the clip's sync group, in step: `in`/`out`
    * stay in `clipId`'s time (its words, captions and zooms hold), the
@@ -605,7 +618,7 @@ function liftZoom(item: Raw, keys: V2Key[]): Raw | undefined {
  * Bring an older document up to EDITDOC_VERSION before parsing. v2 → v3: each
  * a-roll item's zoom keys become one item on the zoom track. v3 → v4: every
  * new field is optional, so only the number changes. Anything else passes
- * through for the schema to judge. v4 → v5, v5 → v6 and v6 → v7: new fields
+ * through for the schema to judge. v4 → v5 ... v8 → v9: new fields
  * are optional (groups, angles, avOffset, graphics behindSubject; v7 logos).
  * v7 → v8: a clip's reframe and an item's track are optional too.
  */
@@ -613,7 +626,7 @@ export function upgradeEditDoc(input: unknown): unknown {
   const doc = input as Raw | null;
   if (!doc || typeof doc !== "object") return input;
   if (doc.version === 2) return upgradeEditDoc(upgradeV2(doc));
-  if (doc.version === 3 || doc.version === 4 || doc.version === 5 || doc.version === 6 || doc.version === 7) return { ...doc, version: EDITDOC_VERSION };
+  if (doc.version === 3 || doc.version === 4 || doc.version === 5 || doc.version === 6 || doc.version === 7 || doc.version === 8) return { ...doc, version: EDITDOC_VERSION };
   return input;
 }
 

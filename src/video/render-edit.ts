@@ -11,7 +11,7 @@ import {join} from 'node:path';
 import {
   CAPTION_DIM,CAPTION_POP,captionLook,captionPlacement,captionText,captionWords,cutFade,dbToVolume,duckPoints,lanes,limiterCeiling,loudnessGain,mixSpeech,parseLoudness,
   shown,textContent,toSrt,textLook,textPosition,pipBox,transitionJoins,zoomKeysBetween,
-  SETTLE_BACK,splitBoxes,companionSources,speechSounds,clipLut,parseCube,pictureSource,writeCube,LUT_SIZE,type Easing,type EditDoc,type MotionTrack,type Reframe,trackAt,type LoudnessLevel,type ZoomKey,type ZoomProperty,
+  SETTLE_BACK,splitBoxes,stackBoxes,coverRegion,companionSources,speechSounds,clipLut,parseCube,pictureSource,writeCube,LUT_SIZE,type Easing,type EditDoc,type MotionTrack,type Reframe,trackAt,type LoudnessLevel,type ZoomKey,type ZoomProperty,
 } from '@voxtale/editdoc';
 import {run} from './media';
 import {writeLibrary} from './sfx';
@@ -122,6 +122,8 @@ export interface Picture {
   mask?:{path:string;in:number};
   /** The brand logo: scaled to box.width, its own shape and see-through kept, no border, top-left at box.x,box.y. */
   logo?:true;
+  /** A stack band (v9): fills its box edge to edge, no border. */
+  band?:true;
   /** Auto reframe (cover fit, whole frame): the crop follows the speaker instead of the middle. */
   reframe?:Reframe;
   /** A graphic pinned to the set: it moves with the spot (offsets in canvas fractions, item seconds). */
@@ -245,16 +247,22 @@ export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Reco
       const two=a?companionSources(doc,a,src.clipId):[];
       const split=a?.layout==='split'&&two.length>0,pip=a?.layout==='pip'&&two.length>0;
       if((a?.layout==='split'||a?.layout==='pip')&&!two.length)skipped.push({itemId:c.id,reason:'companion-out-of-range'});
-      const halves=split?splitBoxes(doc.canvas):null;
+      const stack=a?.layout==='stack'&&a.stack?a.stack:null;
+      const halves=split?splitBoxes(doc.canvas):stack?stackBoxes(doc.canvas,stack.split):null;
+      // Stack: two bands of this one picture, webcam region on top, game region below.
+      const size=clip?.width&&clip.height?{width:clip.width,height:clip.height}:doc.canvas;
       pictures.push({
         itemId:c.id,path,kind:clip?.kind==='image'?'image':'video',fs,fe,start:c.start,in:src.in,
         fit:b?b.fit:'cover',opacity:b?b.opacity:1,
-        zoom:a&&!split?zoomKeysBetween(doc.tracks.zoom,c.start,c.end,doc.canvas):[],
+        zoom:a&&!split&&!stack?zoomKeysBetween(doc.tracks.zoom,c.start,c.end,doc.canvas):[],
+        ...(stack?{crop:coverRegion(size,stack.top,halves![0]),band:true as const}:{}),
         ...(halves?{box:halves[0]}:{}),
         ...(clip?.kind==='video'&&clip.reframe&&!halves&&!b?.crop&&(b?b.fit==='cover':true)?{reframe:clip.reframe}:{}),
         ...(b?.crop?{crop:b.crop}:{}),...(b?.speed&&b.speed!==1?{speed:b.speed}:{}),...(luts[src.clipId]?{lut:luts[src.clipId]}:{}),
       });
       // Split: the companion beside (or under, on a tall canvas); pip: the first companion small in a corner.
+      if(stack) pictures.push({itemId:`${c.id}.stack`,path,kind:clip?.kind==='image'?'image':'video',fs,fe,start:c.start,in:src.in,fit:'cover',opacity:1,zoom:[],
+        box:halves![1],crop:coverRegion(size,stack.bottom,halves![1]),band:true,...(luts[src.clipId]?{lut:luts[src.clipId]}:{})});
       const m=two[0];
       if(m&&(split||pip)) {
         const box=split?halves![1]:pipBox(doc.canvas,a!.pipCorner??'bottom-right');
@@ -586,7 +594,7 @@ export function pictureFilter(p:Picture,skip:number,frames:number,plan:RenderPla
   if(p.crop)f.push(`crop=w='2*trunc(iw*${num(p.crop.w)}/2)':h='2*trunc(ih*${num(p.crop.h)}/2)':x='iw*${num(p.crop.x)}':y='ih*${num(p.crop.y)}'`);
   if(p.logo&&p.box)f.push(`scale=${p.box.width}:-2`);
   else if(p.box)f.push(`scale=${p.box.width}:${p.box.height}:force_original_aspect_ratio=increase`,`crop=${p.box.width}:${p.box.height}`,
-    `drawbox=c=white@0.9:t=${Math.max(2,Math.round(p.box.width/160))}`);
+    ...(p.band?[]:[`drawbox=c=white@0.9:t=${Math.max(2,Math.round(p.box.width/160))}`]));
   else if(p.fit==='cover'&&p.reframe) {
     // The crop's centre on the speaker's path (source time), clamped inside the frame.
     const u=`(${num(p.in)}+(t+${num(skip)})*${num(p.speed??1)})`,sp=p.speed??1;

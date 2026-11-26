@@ -3,7 +3,7 @@
 // J/L cuts, split / pip layouts, speed, transitions, fades, ducking, graphics,
 // titles, markers, look notes) is applied here; adapters (export-port.ts)
 // only translate this model into an app's file. Pure: no I/O.
-import { cutFade, duckPoints, mixSpeech, pipBox, shown, splitBoxes, zoomKeysBetween, lanes, type ZoomKey } from "./render";
+import { cutFade, duckPoints, mixSpeech, pipBox, shown, splitBoxes, stackBoxes, coverRegion, zoomKeysBetween, lanes, type ZoomKey } from "./render";
 import { companionSources, pictureSource, speechSounds } from "./sync";
 import { transitionJoins } from "./timeline";
 import { toFrame, type Fps } from "./time";
@@ -111,7 +111,7 @@ export interface ExportClip {
   /** Into this clip from the one before on its track; centred on the cut. */
   transition?: { kind: TransitionKind; frames: number };
   /** Off: a layer an adapter cannot place (it would cover the picture below). Adapters that carry "layout" ignore it. */
-  layout?: "split" | "pip" | "speaker-pip";
+  layout?: "split" | "pip" | "speaker-pip" | "stack";
   note: { owner?: string; stage?: string; reason?: string; angle?: string; mic?: string };
 }
 
@@ -247,18 +247,26 @@ export function buildExportTimeline(doc: EditDoc, media: ExportMedia): ExportTim
     const asked = a.layout === "split" || a.layout === "pip";
     if (asked && !two.length) warnings.push({ itemId: a.id, note: `${a.layout} has no companion covering this piece: shown alone` });
     const split = a.layout === "split" && two.length > 0, pip = a.layout === "pip" && two.length > 0;
-    const halves = split ? splitBoxes(doc.canvas) : null;
-    const zoom = split ? [] : zoomKeysBetween(doc.tracks.zoom, a.start, a.end, doc.canvas);
+    const stack = a.layout === "stack" && a.stack ? a.stack : null;
+    const halves = split ? splitBoxes(doc.canvas) : stack ? stackBoxes(doc.canvas, stack.split) : null;
+    const zoom = split || stack ? [] : zoomKeysBetween(doc.tracks.zoom, a.start, a.end, doc.canvas);
     if (zoom.length) use("zoom", a.id);
     const len = a.out - a.in;
     const main: ExportClip = {
       id: a.id, itemId: a.id, sourceId: s.id, start: F(a.start), end: F(a.end), in: src.in, out: src.in + len, speed: 1,
-      picture: { ...(halves ? { box: halves[0] } : {}), fit: "cover", zoom, opacity: 1, ...fades(a.id, a) },
+      picture: { ...(halves ? { box: halves[0] } : {}), ...(stack ? { crop: coverRegion(s, stack.top, halves![0]) } : {}), fit: "cover", zoom, opacity: 1, ...fades(a.id, a) },
       ...(a.transition && joins.has(a.id) ? { transition: trans(a.id, a.transition) } : {}),
-      ...(split ? { layout: "split" as const } : {}),
+      ...(split ? { layout: "split" as const } : stack ? { layout: "stack" as const } : {}),
       note: { ...note(a), ...(a.angle && !src.fellBack ? { angle: a.angle } : {}), ...(a.mic ? { mic: a.mic } : {}) },
     };
-    if (split || pip) {
+    if (stack) {
+      use("layout", a.id);
+      layoutClips.push({
+        id: `${a.id}.stack`, itemId: a.id, sourceId: s.id, start: main.start, end: main.end, in: src.in, out: src.in + len, speed: 1,
+        picture: { box: halves![1], crop: coverRegion(s, stack.bottom, halves![1]), fit: "cover", zoom: [], opacity: 1 },
+        layout: "stack", note: note(a),
+      });
+    } else if (split || pip) {
       use("layout", a.id);
       const m = two[0]!, ms = source(m.clipId);
       noteLook(ms, a.id);

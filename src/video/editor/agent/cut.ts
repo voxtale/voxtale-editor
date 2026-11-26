@@ -12,6 +12,7 @@ import type {Face} from './kit';
 import type {ProjectBrief} from '../project';
 import type {ClipMoments,ClipSync} from '../../moments';
 import {applyMulticam,type Multicam} from './multicam';
+import {applyStacks,type StackSpan} from '../../live/stack';
 import {
   FADE_MAX,STYLE_PRESETS,buildCaptions,newEditDoc,outputTimes,packSequence,parseEditDoc,FPS_30,snap,snapDown,snapUp,transitionLength,
   type ARollItem,type Fps,type Grade,type TransitionKind,type ZoomCurve,type ZoomItem,type BRollItem,type ClipIndex,type ClipRef,type EditDoc,type EditStyle,type GraphicItem,type PipCorner,type SourceWord,type TextItem,type WordFix,type MotionTrack,type Reframe,canvasFor,parseAspect,trackStale,
@@ -145,6 +146,8 @@ export interface Overlays {wordFixes?:WordFix[];graphics?:GraphicPlacement[];cap
   frame?:{aspect:string};
   /** Auto reframe path per clip id (set_frame): the crop follows the speaker. */
   reframes?:Record<string,Reframe>;
+  /** Livestream clips: source spans per clip id shown as a stack, webcam over game (../../live/stack.ts). */
+  stacks?:Record<string,StackSpan[]>;
   /** Motion tracks by text or graphic item id (track_title); one the cut moved off its footage is left off. */
   motionTracks?:Record<string,MotionTrack>;
   /**
@@ -388,7 +391,7 @@ export function buildCut(job:Job,segments:Segment[],o:Overlays={}):EditDoc {
   const audio=planAudio(doc,musicCues(job,doc,o.music),o.sfx&&sfxHits(job,doc,o.sfx));
   doc={...doc,tracks:{...doc.tracks,music:audio.music,sfx:audio.sfx},mix:{...doc.mix,...audio.mix}};
   if(o.logo?.items.length)doc={...doc,logos:placeLogos(job,doc,o.logo.ref,o.logo.items)};
-  return parseEditDoc(withMotionTracks(applyMulticam(doc,job,o.multicam),o.motionTracks)).doc;
+  return parseEditDoc(withMotionTracks(applyMulticam(applyStacks(doc,o.stacks),job,o.multicam),o.motionTracks)).doc;
 }
 
 /**

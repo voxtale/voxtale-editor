@@ -186,6 +186,8 @@ export function checkEditDoc(doc: EditDoc): DocIssue[] {
     }
     if (item.mic && clips.get(item.mic) && !clips.get(item.mic)!.hasAudio) warn(`${at}.mic`, `${item.mic} may have no sound`);
     if ((item.layout === "split" || item.layout === "pip") && !item.companions?.length) warn(`${at}.layout`, `${item.layout} layout needs a companion clip`);
+    if (item.layout === "stack" && !item.stack) err(`${at}.stack`, "stack layout needs its two regions");
+    if (item.stack && item.layout !== "stack") warn(`${at}.stack`, "stack regions are ignored unless layout is stack");
   });
 
   const markerIds = new Set<string>();
