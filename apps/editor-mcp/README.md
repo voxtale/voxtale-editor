@@ -8,86 +8,217 @@ Resolve, Premiere or Final Cut (FCPXML/OTIO), or rebuild it in another
 editor through that editor's own MCP.
 
 No VoxTale account. Runs from a checkout of this repo; all the logic is in
-core (`voxtale-editor/video/editor/mcp`), this app only starts it.
+core (`voxtale-editor/mcp`), this app only starts it.
 
-## Set up (Windows, once)
+The server listens on a local URL, `http://127.0.0.1:7820/mcp`, which any
+client can reach. It can also run over stdio for clients that start it
+themselves.
 
-1. In PowerShell:
+## Set up (once)
 
-   ```
-   winget install Git.Git Oven-sh.Bun Gyan.FFmpeg astral-sh.uv
-   ```
+### Mac
 
-   Close and reopen PowerShell, then check `bun --version`,
-   `ffmpeg -version` and `uv --version` each print a version.
+```sh
+brew install git bun ffmpeg-full uv
+git clone https://github.com/voxtale/voxtale-editor ~/voxtale-editor
+cd ~/voxtale-editor
+bun install            # also runs `bun run setup`
+```
 
-   - uv runs the face finder that aims zooms at your eyes (it fetches
-     Python and OpenCV on first use). Without uv, zooms aim at the middle.
-   - If ffmpeg lives elsewhere: `setx VOXTALE_EDITOR_FFMPEG "C:\path\ffmpeg.exe"`
-     and `setx VOXTALE_EDITOR_FFPROBE "C:\path\ffprobe.exe"`.
+The editor finds ffmpeg-full by itself; set `VOXTALE_EDITOR_FFMPEG` /
+`VOXTALE_EDITOR_FFPROBE` only to use another build.
 
-2. Get the code:
+### Windows
 
-   ```
-   git clone https://github.com/voxtale/voxtale-editor $HOME\voxtale-editor
-   cd $HOME\voxtale-editor
-   bun install
-   ```
+In PowerShell:
 
-   If the server fails with `Cannot find module 'voxtale-editor/video/editor/mcp'`,
-   `bun install` did not link the workspace: delete `node_modules` and run
-   `bun install` again.
+```
+winget install Git.Git Oven-sh.Bun Gyan.FFmpeg astral-sh.uv
+```
 
-3. Get an AssemblyAI key (assemblyai.com; about $0.01 per minute of
-   speech) and add the server to Claude Code:
+Close and reopen PowerShell, then check `bun --version`, `ffmpeg -version`
+and `uv --version` each print a version. If ffmpeg lives elsewhere:
+`setx VOXTALE_EDITOR_FFMPEG "C:\path\ffmpeg.exe"` and
+`setx VOXTALE_EDITOR_FFPROBE "C:\path\ffprobe.exe"`.
 
-   ```
-   claude mcp add voxtale-editor --scope user -e ASSEMBLYAI_API_KEY=your-key -e OPENROUTER_API_KEY=your-key -- bun $HOME\voxtale\apps\editor-mcp\src\main.ts
-   ```
+```
+git clone https://github.com/voxtale/voxtale-editor $HOME\voxtale-editor
+cd $HOME\voxtale-editor
+bun install
+```
 
-   `OPENROUTER_API_KEY` (openrouter.ai) is optional. With it, `open` labels
-   each b-roll and screen clip with a vision model, the same pass the cloud
-   editor runs, so the agent can search footage (`find_footage`) and see
-   when a synced screen changes (`screen_activity`). It costs roughly
-   1-3 cents and under a minute per minute of footage; the talking-head
-   clip is not labelled. Labels are kept in `.edit/moments/`, so opening the
-   same files again costs nothing. Without the key, `open` only transcribes
-   and those two tools stay off.
+### What setup does
 
-4. Renders take minutes. Let Claude Code wait for them:
+`bun install` runs `bun run setup`, which makes `.venv` (Python with OpenCV,
+through uv) for the face finder and the subject mask. The models
+(`models/`, YuNet and U2-Net-p) and the Pixelify Sans font ship in the
+repo. Run `bun run setup` again any time; it skips what is there and
+says what is missing.
 
-   ```
-   setx MCP_TOOL_TIMEOUT 3600000
-   ```
+- Face finder: zooms aim at your eyes. Without it they aim at the middle.
+- Subject mask: text can sit behind you. Without it, text goes over you.
 
-   Reopen the terminal after `setx`.
+The server checks both at start. If something is missing it says so in
+the terminal and in the reply to `open` and `resume`, so your agent tells
+you.
 
-Mac: `brew install bun ffmpeg-full uv`, then steps 2–4 with Mac paths
-(`export MCP_TOOL_TIMEOUT=3600000` in your shell profile). The editor finds
-ffmpeg-full by itself, so `VOXTALE_EDITOR_FFMPEG` / `VOXTALE_EDITOR_FFPROBE` are
-optional on Mac; set them only to use another build.
+If the server fails with `Cannot find module 'voxtale-editor/mcp'`,
+`bun install` did not link the workspace: delete `node_modules` and run
+`bun install` again.
+
+### Keys
+
+Get an AssemblyAI key (assemblyai.com; about $0.01 per minute of speech)
+for transcription. Put it in `.env` in the repo folder
+(`ASSEMBLYAI_API_KEY=…`; bun loads it), or pass it with `-e` on a stdio
+client line.
+
+`OPENROUTER_API_KEY` (openrouter.ai) is optional. With it, `open` labels
+each b-roll and screen clip with a vision model, so the agent can search
+footage (`find_footage`) and see when a synced screen changes
+(`screen_activity`). Roughly 1-3 cents and under a minute per minute of
+footage; labels are kept in `.edit/moments/`, so opening the same files
+again costs nothing.
+
+## Start the server
+
+```sh
+cd ~/voxtale-editor          # Windows: cd $HOME\voxtale-editor
+bun run mcp                  # http://127.0.0.1:7820/mcp
+bun run mcp -- --port 7900   # another port (or VOXTALE_EDITOR_PORT=7900)
+```
+
+Leave it running in its own terminal. It prints its URL and where its
+token is.
+
+### Token
+
+Every request needs `Authorization: Bearer <token>`. The first start makes
+a random token in `~/.voxtale-editor/mcp-token` (owner-only), or set your
+own with `VOXTALE_EDITOR_TOKEN`. Read it:
+
+```sh
+cat ~/.voxtale-editor/mcp-token                     # Mac
+Get-Content $HOME\.voxtale-editor\mcp-token         # Windows
+```
+
+What keeps web pages out: the server binds 127.0.0.1 only, refuses any
+`Host` that is not loopback, refuses any browser `Origin` that is not its
+own, and needs the token. Anyone who can read your home folder can read
+the token.
+
+## Connect a client
+
+Use the URL and token from the server's start message. One server holds
+one open project: run one edit at a time, or start a second server on
+another port.
+
+### Claude Code
+
+```sh
+claude mcp add --scope user --transport http voxtale-editor http://127.0.0.1:7820/mcp \
+  --header "Authorization: Bearer $(cat ~/.voxtale-editor/mcp-token)"
+```
+
+Windows (PowerShell):
+
+```
+claude mcp add --scope user --transport http voxtale-editor http://127.0.0.1:7820/mcp --header "Authorization: Bearer $(Get-Content $HOME\.voxtale-editor\mcp-token)"
+```
+
+Renders take minutes. Let Claude Code wait for them:
+`export MCP_TOOL_TIMEOUT=3600000` in your shell profile (Mac) or
+`setx MCP_TOOL_TIMEOUT 3600000` (Windows; reopen the terminal).
+
+### Codex
+
+`~/.codex/config.toml`:
+
+```toml
+[mcp_servers.voxtale-editor]
+url = "http://127.0.0.1:7820/mcp"
+bearer_token_env_var = "VOXTALE_EDITOR_TOKEN"
+tool_timeout_sec = 3600
+```
+
+Then set `VOXTALE_EDITOR_TOKEN` to the token in the shell you start Codex
+from (`export VOXTALE_EDITOR_TOKEN=$(cat ~/.voxtale-editor/mcp-token)`).
+
+### Cursor
+
+`~/.cursor/mcp.json` (or `.cursor/mcp.json` in a project):
+
+```json
+{
+  "mcpServers": {
+    "voxtale-editor": {
+      "url": "http://127.0.0.1:7820/mcp",
+      "headers": {"Authorization": "Bearer <token>"}
+    }
+  }
+}
+```
+
+### Stdio (the client starts the server)
+
+```sh
+claude mcp add --scope user voxtale-editor -e ASSEMBLYAI_API_KEY=your-key -- bun ~/voxtale-editor/apps/editor-mcp/src/main.ts --stdio
+```
+
+Windows: `bun $HOME\voxtale-editor\apps\editor-mcp\src\main.ts --stdio`.
+With no flag the server picks stdio when a client starts it with pipes and
+HTTP when you run it in a terminal; `--stdio` / `--http` (or
+`VOXTALE_EDITOR_TRANSPORT`) make it explicit.
 
 ## Use
 
-Open Claude Code in the folder with your clips and say what you want:
+Open your agent in the folder with your clips and say what you want:
 
 - "Edit talk.mp4 into a 30 second vertical short; the rest is b-roll."
 - "Make a video from voiceover.m4a with these clips over it."
 - "talk.mp4 and screen.mp4 were recorded together; show the screen when I
   point at it."
 
+Over HTTP the server does not share your agent's folder: the agent passes
+the footage folder to `open` (it does so from the paths you give).
+
 The agent opens the files, edits, and writes `final.mp4` into the folder.
 Ask for changes in plain words ("tighter start", "less b-roll") and it
 renders again. The edit lives in `.edit/` in that folder; a new session
-picks it up.
+picks it up with `resume`.
 
 ## Graphics
 
-The first graphic installs HyperFrames and a render browser into
-`~/.voxtale-editor/hyperframes` (about 200 MB, a few minutes, once). The
-agent writes each graphic as HTML, and it runs in that browser with
-network access: fine for your own agent on your own machine. Turn graphics
-off with `-e VOXTALE_GRAPHICS=off` on the `claude mcp add` line.
+Graphics render with Remotion by default (`VOXTALE_GRAPHICS_RENDERER=hyperframes`
+for HyperFrames). The first graphic installs the renderer and a headless
+browser into `~/.voxtale-editor/remotion` (or `hyperframes`), a few hundred
+MB, once. The agent's graphic code runs on your machine with network
+access: fine for your own agent on your own machine. Turn graphics off
+with `VOXTALE_GRAPHICS=off`.
+
+Fonts in `fonts/` (Inter, Pixelify Sans for pixel art; both OFL) load
+into every graphic.
+
+For a locked render (Docker, network off), build the sandbox image:
+`bun run build:sandbox` (`tools/build-remotion-sandbox.sh`).
+
+## Environment
+
+| Variable | Use |
+|---|---|
+| `ASSEMBLYAI_API_KEY`, `ASSEMBLYAI_REGION` | Transcription; paid |
+| `OPENROUTER_API_KEY` | Footage labels at `open`; optional, paid |
+| `VOXTALE_EDITOR_PORT` | HTTP port (default 7820) |
+| `VOXTALE_EDITOR_TOKEN` | HTTP bearer token (default: `~/.voxtale-editor/mcp-token`) |
+| `VOXTALE_EDITOR_TRANSPORT` | `http` or `stdio` (default: stdio when started with pipes, else http) |
+| `EDIT_FOLDER` | Footage folder when a call names none (default: the working folder) |
+| `VOXTALE_GRAPHICS_RENDERER` | `remotion` (default) or `hyperframes` |
+| `VOXTALE_GRAPHICS` | `off` turns graphics off |
+| `VOXTALE_STYLES` | Style folders (default `~/.voxtale-editor/styles`) |
+| `VOXTALE_EDITOR_FFMPEG`, `VOXTALE_EDITOR_FFPROBE` | ffmpeg paths |
+| `VOXTALE_EDITOR_PYTHON`, `VOXTALE_EDITOR_UV` | Python interpreter (default the repo's `.venv`) / uv binary |
+| `VOXTALE_REMOTION_IMAGE`, `VOXTALE_HF_IMAGE` | Sandbox image tags |
+| `VOXTALE_EDITOR_SKIP_SETUP=1` | Skip setup during `bun install` |
 
 ## What it offers
 
@@ -96,25 +227,29 @@ off with `-e VOXTALE_GRAPHICS=off` on the `claude mcp add` line.
   `screen_activity` (with `OPENROUTER_API_KEY`), `set_captions`,
   `set_zooms`, `place_text`, `render_graphic`, `place_graphic`, `set_music`,
   `set_sfx`, `set_look`, `propose_rule`, `finish`, …), `render`, `sheet`,
-  `clips`, `export_timeline`, `rules`, `decide_rule`.
-- Sound and colour (skill v26): `set_sfx` places sounds from a built-in
-  library, made locally (no licence), each lined up on a word, card or cut.
-  `set_music` starts the track where it comes alive, or at an `in` second you
-  give; footage snaps to the beat only when the beat is firm. `set_look`
+  `clips`, `export_timeline`, and the style tools (`styles`, `style`,
+  `create_style`, `use_style`, `learn_style`, `set_brand`, `rules`,
+  `decide_rule`, …).
+- Sound and colour: `set_sfx` places sounds from a built-in library, made
+  locally (no licence), each lined up on a word, card or cut. `set_music`
+  starts the track where it comes alive, or at an `in` second you give;
+  footage snaps to the beat only when the beat is firm. `set_look`
   measures the picture, fixes exposure and colour cast, adds a light look,
   and shows a before/after still. `check_cut` and `render` report loudness
   (LUFS, true peak) against the target.
-- Standing rules: when you say "always" or "from now on", the editor
-  proposes a rule. Say yes, reword it or say no; your agent records it with
-  `decide_rule`. Accepted rules live in `~/.voxtale-editor/rules.json` and
-  load into every later edit.
+- Styles: a style folder (rules, measured pace, brand, references) per
+  look you edit in, in `~/.voxtale-editor/styles`. When you say "always" or
+  "from now on", the editor proposes a rule; say yes, reword it or say no,
+  and your agent records it with `decide_rule`.
 - Resources: `editdoc://guide`, `editdoc://schema`, `editdoc://current`.
 - Prompt: `edit-video`.
 
 ## Update
 
-```
-cd $HOME\voxtale-editor
+```sh
+cd ~/voxtale-editor          # Windows: cd $HOME\voxtale-editor
 git pull
 bun install
 ```
+
+Then restart the server.

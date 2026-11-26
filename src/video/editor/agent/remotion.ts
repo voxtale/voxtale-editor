@@ -20,7 +20,7 @@ export function graphicsEngine(v:string|undefined=process.env.VOXTALE_GRAPHICS_R
   return e==='hyperframes'||e==='hf'?'hyperframes':'remotion';
 }
 
-export const REMOTION_IMAGE=process.env.VOXTALE_REMOTION_IMAGE??'voxtale-remotion-sandbox:1';
+export const REMOTION_IMAGE=process.env.VOXTALE_REMOTION_IMAGE??'voxtale-remotion-sandbox:2';
 const SANDBOX=join(import.meta.dir,'sandbox','remotion');
 
 const DOCKER_FLAGS=['--network','none','--read-only','--tmpfs','/tmp:rw,size=2g,exec','--tmpfs','/home/render:rw,size=256m,exec,uid=10001,gid=10001',

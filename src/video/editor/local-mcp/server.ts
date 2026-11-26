@@ -1,4 +1,4 @@
-// The VoxTale editor as a local MCP server (stdio), for any agent on the
+// The VoxTale editor as a local MCP server (stdio or loopback HTTP), for any agent on the
 // creator's machine: Claude Code, Codex, Cursor, or an agent driving another
 // editor's MCP. One project at a time, kept in <folder>/.edit/. The app
 // (apps/editor-mcp) only wires it up.
@@ -9,11 +9,14 @@
 // screen_activity), as the cloud planner does. Resources: the
 // EditDoc schema, a guide to reading it, and the current edit. Prompt:
 // edit-video.
+import {randomBytes} from 'node:crypto';
 import {existsSync} from 'node:fs';
-import {readFile,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {editDocJsonSchema,STYLE_PRESETS,toFcpxml,toOtio,toSrt} from '@voxtale/editdoc';
+import {nativeFaceFinder} from '../../../native/bridge';
+import {checkNatives,missingNote,type NativeCheck} from '../../../native/check';
 import {uvFaceFinder} from '../../../native/uv-faces';
 import type {VisionModel} from '../../footage-index';
 import {askVision} from '../../openrouter';
@@ -24,6 +27,7 @@ import {taskPrompt} from '../agent/plan';
 import {z,type ToolResult} from '../agent/port';
 import {jobTools,newWorkspace} from '../agent/session';
 import type {Workspace} from '../agent/tools';
+import {serveHttp} from './http';
 import {EDITDOC_GUIDE,editingGuide,SERVER_INSTRUCTIONS} from './guide';
 import {styleTools} from './style-tools';
 import {stylesRoot} from '../styles/folder';
@@ -49,6 +53,8 @@ export interface LocalEditorOptions {
   /** Labels footage at open; default the OpenRouter vision model when OPENROUTER_API_KEY is set, null = off. */
   vision?:VisionModel|null;
   version?:string;
+  /** What this machine has of the face finder, subject mask and pixel font; default checked on first need (checkNatives). */
+  natives?:Promise<NativeCheck>;
 }
 
 const ROLES:Record<string,[Role,boolean,boolean]>={talk:['a-roll',false,false],voiceover:['a-roll',true,false],broll:['b-roll',false,false],
@@ -71,8 +77,14 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
   const graphics=o.graphics??process.env.VOXTALE_GRAPHICS!=='off';
   const vision=o.vision!==undefined?o.vision:process.env.OPENROUTER_API_KEY?(system:string,parts:Parameters<VisionModel>[1])=>askVision(system,parts):null;
   const folderOf=(f?:string)=>resolve(f??o.folder??process.env.EDIT_FOLDER??process.cwd());
+  let natives=o.natives;
+  const nativesOf=()=>(natives??=checkNatives(o.fontsDir?{fontsDir:o.fontsDir}:{}));
+  /** Said on open and resume while something is missing, so the agent tells the creator. */
+  const missing=async()=>{const n=missingNote(await nativesOf());return n?`\n\n${n}`:'';};
+  // The venv's face finder when setup made it; else uv fetches OpenCV once.
+  const facesOf=async()=>{const c=await nativesOf();return c.python&&c.faceModel?nativeFaceFinder:uvFaceFinder();};
   let ports:Promise<Ports>|undefined;
-  const portsOf=()=>(ports??=uvFaceFinder().then(faces=>({...(faces?{faces}:{}),
+  const portsOf=()=>(ports??=facesOf().then(faces=>({...(faces?{faces}:{}),
     ...(graphics?{html:localGraphicsRenderer({home:o.graphicsHome??join(homedir(),'.voxtale-editor'),...(o.fontsDir?{fontsDir:o.fontsDir}:{})})}:{})})));
 
   let at:At|undefined;
@@ -133,7 +145,7 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
         const styled=style&&!isPreset(style)?await useStyle(await root(),style,usage):undefined;
         await openProject(a,{files:of,...(format?{format}:{}),...(style&&!styled?{style}:{}),...(styled?{styled}:{}),...(target?{target}:{}),...(note?{instruction:note}:{}),proxies:proxies!==false,vision},log);
         await load(a);
-        return {text:`${lines.join('\n')}\n\nOpen: ${a.folder}\nclips:\n${clipLines(open!.ws)}\n\n${brief(open!.ws)}`};
+        return {text:`${lines.join('\n')}\n\nOpen: ${a.folder}\nclips:\n${clipLines(open!.ws)}${await missing()}\n\n${brief(open!.ws)}`};
       }},
 
     {name:'resume',description:'Continue the edit already in <folder>/.edit/.',
@@ -143,7 +155,7 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
         if(!hasProject(a))return {text:`No edit in ${a.dir}: call open with the footage.`,isError:true};
         await load(a);
         const {ws}=current();
-        return {text:`Resumed ${a.folder}\nclips:\n${clipLines(ws)}\n${ws.doc?`cut: ${Math.max(0,...ws.doc.tracks['a-roll'].map(x=>x.end)).toFixed(1)}s, ${ws.segments.length} segments`:'no cut yet'}\n\n${brief(ws)}`};
+        return {text:`Resumed ${a.folder}\nclips:\n${clipLines(ws)}\n${ws.doc?`cut: ${Math.max(0,...ws.doc.tracks['a-roll'].map(x=>x.end)).toFixed(1)}s, ${ws.segments.length} segments`:'no cut yet'}${await missing()}\n\n${brief(ws)}`};
       }},
 
     {name:'render',description:'Render the edit to an MP4 (default <folder>/final.mp4). Takes about as long as the video, or longer. width, height and fps set the delivered file when a brief asks for one (default: the cut\'s own canvas and rate); the cut is scaled whole into that frame, letterboxed or pillarboxed (fit contain, the default), never cropped unless fit is cover. The result reports the file\'s actual size, frame rate and length. Then look at it with sheet.',
@@ -235,12 +247,43 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
   };
 }
 
-/** Run the server on stdio. An edit already in the default folder opens by itself. */
-export async function runLocalEditor(o:LocalEditorOptions={}):Promise<void> {
-  console.log=console.error;  // stdout is the protocol
+/** The bearer token for HTTP: VOXTALE_EDITOR_TOKEN, else kept in <home>/mcp-token (made once, owner-only). */
+export async function editorToken(home=join(homedir(),'.voxtale-editor'),env=process.env.VOXTALE_EDITOR_TOKEN):Promise<{token:string;file?:string}> {
+  if(env?.trim())return {token:env.trim()};
+  const file=join(home,'mcp-token');
+  const kept=await readFile(file,'utf8').then(t=>t.trim(),()=>'');
+  if(kept)return {token:kept,file};
+  const token=randomBytes(24).toString('base64url');
+  await mkdir(home,{recursive:true});
+  await writeFile(file,`${token}\n`,{mode:0o600});
+  return {token,file};
+}
+
+export interface RunOptions extends LocalEditorOptions {
+  /** Serve MCP Streamable HTTP on loopback instead of stdio. */
+  http?:{port?:number;host?:string;token?:string};
+}
+
+/**
+ * Run the server on stdio, or on a loopback port with `http`. An edit already
+ * in the default folder opens by itself. Checks the face finder, subject mask
+ * and pixel font at start and says on stderr what is missing.
+ */
+export async function runLocalEditor(o:RunOptions={}):Promise<void> {
+  if(!o.http)console.log=console.error;  // stdout is the protocol
+  const natives=o.natives??checkNatives(o.fontsDir?{fontsDir:o.fontsDir}:{});
+  void natives.then(c=>{const n=missingNote(c);if(n)console.error(n);});
   let send:Notify=()=>{};
-  const server=localEditorServer(o,()=>send);
+  const server=localEditorServer({...o,natives},()=>send);
   const start=projectAt(server.folderOf());
   await server.resume(start).catch(e=>console.error(`could not resume ${start.dir}: ${e instanceof Error?e.message:e}`));
-  send=serveStdio(server).notify;
+  if(!o.http){send=serveStdio(server).notify;return;}
+  const {token,file}=o.http.token?{token:o.http.token,file:undefined}:await editorToken();
+  const end=await serveHttp(server,{token,...(o.http.port!==undefined?{port:o.http.port}:{}),...(o.http.host?{host:o.http.host}:{})});
+  send=end.notify;
+  console.error(`VoxTale editor MCP: ${end.url}\ntoken: ${file?`${file} (or set VOXTALE_EDITOR_TOKEN)`:'from VOXTALE_EDITOR_TOKEN'}\n`
+    +`Claude Code: claude mcp add --transport http voxtale-editor ${end.url} --header "Authorization: Bearer ${file?`$(cat ${file})`:'$VOXTALE_EDITOR_TOKEN'}"\n`
+    +'Codex, Cursor: see apps/editor-mcp/README.md');
+  const stop=()=>{void end.close().then(()=>process.exit(0));};
+  process.once('SIGINT',stop);process.once('SIGTERM',stop);
 }

@@ -12,7 +12,7 @@ export const FPS = 30;
 type Input = {scene: string; props: Record<string, unknown>; seconds: number; width: number; height: number; fonts: string[]};
 
 const WEIGHTS: Record<string, number> = {Thin: 100, Light: 300, Regular: 400, Medium: 500, SemiBold: 600, Bold: 700, ExtraBold: 800, Black: 900};
-const FAMILIES: Record<string, string> = {JetBrainsMono: 'JetBrains Mono', InstrumentSerif: 'Instrument Serif'};
+const FAMILIES: Record<string, string> = {JetBrainsMono: 'JetBrains Mono', InstrumentSerif: 'Instrument Serif', PixelifySans: 'Pixelify Sans'};
 /** `Inter-SemiBold.otf` → {family: Inter, weight: 600}. */
 export function fontFace(file: string) {
   const [base = '', style = 'Regular'] = file.replace(/\.(ttf|otf|woff2?)$/i, '').split('-');
