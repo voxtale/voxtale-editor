@@ -28,8 +28,10 @@ import {noteReplies,REPLY_MAX,type NoteReply} from './notes';
 import {cutGate,labelNotes,markLooked,markViewed,showGate,surveyTools} from './survey-tools';
 import {contentBox,greyFrames,spreadTimes} from '../../screen';
 import {loudnessLines,sfxLines,soundLookTools} from './sound-look';
-import type {Grade} from '@voxtale/editdoc';
+import type {ClipRef,Grade} from '@voxtale/editdoc';
 import type {SfxPlacement} from './cut';
+import {mediaTools} from './media-tools';
+import type {Multicam} from './multicam';
 
 export interface Workspace {
   dir:string;
@@ -98,6 +100,14 @@ export interface Workspace {
   sfxPeaks?:Record<string,{peak:number;levelDb:number}>;
   /** Colour grade by clip id (set_look). */
   grades?:Record<string,Grade>;
+  /** Per clip id: colour space or input LUT (set_look) and A/V offset (set_av_offset), over what the open found. */
+  clipSettings?:Record<string,Pick<ClipRef,'colorSpace'|'inputLut'|'avOffset'>>;
+  /** Clips the open found recorded together, with their sound levels (project.json; not saved in state). */
+  syncGroups?:Pick<Multicam,'groups'|'levels'|'step'>;
+  /** Original source files by clip hash (not saved): set_av_offset measures these. */
+  media?:Record<string,string>;
+  /** The agent's camera/mic picks per word range, and auto picking (set_angles). */
+  angles?:Pick<Multicam,'choices'|'auto'>;
   /** Standing rules proposed this edit, for the creator to decide. */
   proposedRules?:{text:string;said:string}[];
 }
@@ -158,7 +168,7 @@ async function findEyes(ws:Workspace,doc:EditDoc):Promise<boolean> {
 export async function save(ws:Workspace):Promise<void> {
   const build=()=>buildCut(ws.job,ws.segments,{graphics:ws.placements.filter(p=>ws.graphics[p.shows??p.id]).map(p=>({...p,placement:ws.graphics[p.shows??p.id]!.place,
     ...(p.variants?{variants:p.variants.filter(v=>ws.graphics[v.id]).map(v=>({id:v.id,placement:ws.graphics[v.id]!.place}))}:{})})),captions:ws.captions,zooms:ws.zooms,broll:ws.broll,text:ws.text,chapters:ws.chapters,...(ws.music?{music:ws.music}:{}),...(ws.wordFixes?.length?{wordFixes:ws.wordFixes}:{}),
-    ...(ws.sfx?{sfx:ws.sfx}:{}),...(ws.grades?{grades:ws.grades}:{}),
+    ...(ws.sfx?{sfx:ws.sfx}:{}),...(ws.grades?{grades:ws.grades}:{}),...(ws.clipSettings?{clipSettings:ws.clipSettings}:{}),...(ws.syncGroups?{multicam:{...ws.syncGroups,...ws.angles}}:{}),
     eyesAt:(clip,t)=>ws.eyeCache?.get(eyeKey(clip,t))??undefined,
     edge:(clip,t,side,limit,other)=>{const v=ws.voices?.get(clip);return v?wordEdge(v,t,side,limit,other):t;},
     quiet:(clip,t,side,limit)=>{const v=ws.voices?.get(clip);return v?quietTo(v,t,side,limit):limit;}});
@@ -180,7 +190,7 @@ export async function save(ws:Workspace):Promise<void> {
   await writeFile(join(ws.dir,'edit.json'),JSON.stringify(ws.doc,null,1));
   await writeFile(join(ws.dir,AGENT_EDIT),JSON.stringify(ws.doc));
   await writeFile(join(ws.dir,'state.json'),JSON.stringify({levels:ws.levels,segments:ws.segments,placements:ws.placements,captions:ws.captions,zooms:ws.zooms,broll:ws.broll,text:ws.text,chapters:ws.chapters,music:ws.music,wordFixes:ws.wordFixes,graphics:ws.graphics,finished:ws.finished,hand:ws.hand,
-    sfx:ws.sfx,sfxPeaks:ws.sfxPeaks,grades:ws.grades,proposedRules:ws.proposedRules},null,1));
+    sfx:ws.sfx,sfxPeaks:ws.sfxPeaks,grades:ws.grades,clipSettings:ws.clipSettings,angles:ws.angles,proposedRules:ws.proposedRules},null,1));
 }
 
 /** Read the voice track of every speaking clip not read yet. A host that cannot gives none: the editor works from words alone. */
@@ -295,7 +305,7 @@ const shotSchema=z.object({
 
 /** Change workspace state and rebuild; on a build error, put it back. */
 export async function change(ws:Workspace,f:()=>void,o:{named?:string[];drop?:string[]}={}):Promise<void> {
-  const before={segments:ws.segments,placements:ws.placements,captions:ws.captions,zooms:ws.zooms,broll:ws.broll,text:ws.text,chapters:ws.chapters,music:ws.music,wordFixes:ws.wordFixes,sfx:ws.sfx,grades:ws.grades};
+  const before={segments:ws.segments,placements:ws.placements,captions:ws.captions,zooms:ws.zooms,broll:ws.broll,text:ws.text,chapters:ws.chapters,music:ws.music,wordFixes:ws.wordFixes,sfx:ws.sfx,grades:ws.grades,clipSettings:ws.clipSettings,angles:ws.angles};
   f();
   ws.cutChanged=JSON.stringify(before.segments)!==JSON.stringify(ws.segments);
   ws.named=o.named?.length?new Set(o.named):undefined;

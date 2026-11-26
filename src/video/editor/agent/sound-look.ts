@@ -4,7 +4,8 @@
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {z} from 'zod/v4';
-import {applyGrade,GRADE_LOOK_IDS,LUT_SIZE,luma,lutFor,pruneGrade,toLinear,whiteBalanceFor,writeCube,type EditDoc,type Grade,type GradeLookId,type RGB} from '@voxtale/editdoc';
+import {applyGrade,clipColorSpace,clipConversion,clipLut,parseCube,sampleCube,COLOR_SPACES,GRADE_LOOK_IDS,LUT_SIZE,luma,pruneGrade,toLinear,whiteBalanceFor,writeCube,type ClipRef,type Cube,type EditDoc,type Grade,type GradeLookId,type RGB} from '@voxtale/editdoc';
+import {LOOK_COLOR_NOTE} from './media-skill-text';
 import {AUDIO_RATE} from '@voxtale/frames';
 import {speechLoudness} from '../../audio';
 import {libraryClip,librarySound,SFX_SOUND_IDS,SFX_SOUNDS,SFX_UNDER_VOICE,sfxWarnings,soundPeak,type PlacedHit,type SfxSound} from '../../sfx';
@@ -208,23 +209,38 @@ export function soundLookTools(ws:Workspace,change:Change):ToolDef<any>[] {
         return {text:[ps.length?`${placed.length} hit(s):`:'no sound effects',...lines,...sfxLines(ws,ws.doc!).slice(1)].join('\n')};
       }}),
 
-    defineTool({name:'set_look',description:`Colour: measure a clip's frames and correct them (exposure toward a face-lit mid grey, half of any colour cast), then at most a light look (${GRADE_LOOK_IDS.join(', ')}; intensity ≤${LOOK_MAX}, default ${LOOK_DEFAULT}). Returns the measured numbers before and after and a before|after still. clip "all" grades every footage clip, each from its own measure. correct:false keeps the look only; look "none" removes it; off:true switches the grade off (kept for later). Correct when the numbers call for it; a look only when the creator or the style asks.`,
+    defineTool({name:'set_look',description:`Colour: measure a clip's frames and correct them (exposure toward a face-lit mid grey, half of any colour cast), then at most a light look (${GRADE_LOOK_IDS.join(', ')}; intensity ≤${LOOK_MAX}, default ${LOOK_DEFAULT}). Returns the measured numbers before and after and a before|after still. clip "all" grades every footage clip, each from its own measure. correct:false keeps the look only; look "none" removes it; off:true switches the grade off (kept for later). Correct when the numbers call for it; a look only when the creator or the style asks. ${LOOK_COLOR_NOTE}`,
       input:{clip:z.string().describe('clip id, or "all"'),
+        colorSpace:z.union([z.enum(COLOR_SPACES),z.literal('auto')]).optional().describe('what the footage was shot in; auto = as detected at open'),
+        inputLut:z.string().max(1000).optional().describe('a .cube to apply before the grade instead (e.g. DJI D-Log M to Rec.709); "none" removes it'),
         correct:z.boolean().optional().describe('default true'),
         look:z.union([z.enum(GRADE_LOOK_IDS),z.literal('none')]).optional(),
         intensity:z.number().min(0).max(LOOK_MAX).optional(),
         off:z.boolean().optional()},
-      run:async({clip,correct,look,intensity,off})=>{
+      run:async({clip,correct,look,intensity,off,colorSpace,inputLut})=>{
         const targets=clip==='all'?videoClips().map(c=>c.ref.id):[clip];
         for(const id of targets){const c=clipOf(ws.job,id);if(c.ref.kind==='audio')throw new Error(`${id} is sound only`);}
         const dir=join(ws.dir,'looks');
         await mkdir(dir,{recursive:true});
         const grades:Record<string,Grade>={...ws.grades},lines:string[]=[],images:{data:Uint8Array;mime:'image/jpeg'}[]=[];
+        const settings={...ws.clipSettings};
         for(const id of targets) {
+          // Input first: log/HDR footage goes to Rec.709 before it is measured and graded.
+          const now={...settings[id]};
+          if(colorSpace)colorSpace==='auto'?delete now.colorSpace:now.colorSpace=colorSpace;
+          if(inputLut)inputLut==='none'?delete now.inputLut:now.inputLut=inputLut;
+          if(Object.keys(now).length)settings[id]=now;else delete settings[id];
+          const ref:ClipRef={...clipOf(ws.job,id).ref,...now};
+          let cube:Cube|null=null;
+          if(ref.inputLut)try{cube=parseCube(await readFile(ref.inputLut,'utf8'));}catch(e){throw new Error(`${id}: input LUT ${ref.inputLut}: ${(e as Error).message}`);}
+          const convert=cube?((c:RGB)=>{const o=sampleCube(cube!,c);c[0]=o[0];c[1]=o[1];c[2]=o[2];}):clipConversion(ref);
+          const cs=cube?`input LUT ${ref.inputLut}`:clipColorSpace(ref)??'Rec.709';
+          lines.push(`${id} colour: ${cs}${ref.color?.why?` (open found: ${ref.color.log??ref.color.hdr??'Rec.709'}, ${ref.color.why})`:''}`);
           const prev=grades[id];
           if(off){if(prev)grades[id]={...prev,enabled:false};lines.push(`${id}: grade off${prev?'':' (it had none)'}`);continue;}
-          const {px,still}=await samplesOf(ws,id,dir);
-          if(!px.length){lines.push(`${id}: frames could not be read, not graded`);continue;}
+          const {px:raw,still}=await samplesOf(ws,id,dir);
+          if(!raw.length){lines.push(`${id}: frames could not be read, not graded`);continue;}
+          const px=convert?raw.map(p=>{const c:RGB=[p[0],p[1],p[2]];convert(c);return c.map(v=>Math.min(1,Math.max(0,v))) as RGB;}):raw;
           const before=frameStats(px);
           const fix=correct===false?{}:correctionFor(before);
           const keepLook=look===undefined&&prev?.look?{look:prev.look,intensity:prev.intensity??LOOK_DEFAULT}:{};
@@ -233,7 +249,7 @@ export function soundLookTools(ws:Workspace,change:Change):ToolDef<any>[] {
           const after=frameStats(px.map(p=>applyGrade(g,p)));
           lines.push(`${id} ${clipOf(ws.job,id).ref.name}:`,`  before: ${statsText(before)}`,
             `  grade: ${g?JSON.stringify(g):'none needed'}`,`  after:  ${statsText(after)}`);
-          const lut=lutFor(g);
+          const lut=clipLut({...ref,grade:g},cube);
           if(lut&&still&&images.length<2) {
             const cube=join(dir,`${id}.cube`),out=join(dir,`${id}-before-after.jpg`);
             await writeFile(cube,writeCube(lut,LUT_SIZE,`${id}`));
@@ -241,7 +257,7 @@ export function soundLookTools(ws:Workspace,change:Change):ToolDef<any>[] {
             images.push({data:new Uint8Array(await readFile(out)),mime:'image/jpeg'});
           }
         }
-        await change(ws,()=>{ws.grades=Object.keys(grades).length?grades:undefined;});
+        await change(ws,()=>{ws.grades=Object.keys(grades).length?grades:undefined;ws.clipSettings=Object.keys(settings).length?settings:undefined;});
         return {text:[...lines,'Measured on 5 frames per clip at 64 px; white balance by grey world over the mid tones, so a frame full of skin or one coloured wall reads as a cast: check the still.'].join('\n'),...(images.length?{images}:{})};
       }}),
 

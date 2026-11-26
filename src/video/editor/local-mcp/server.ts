@@ -29,6 +29,7 @@ import {styleTools} from './style-tools';
 import {stylesRoot} from '../styles/folder';
 import {migrateGlobalRules} from '../styles/style-rules';
 import {isPreset,useStyle} from '../styles/use';
+import {OPEN_MEDIA_NOTE} from '../agent/media-skill-text';
 import {clipFiles,clipLines,finalDoc,hasProject,keepProject,loadProject,openProject,projectAt,renderProject,sheetOf,
   type At,type OpenFile,type Ports,type Project,type Role} from './project';
 
@@ -51,7 +52,8 @@ export interface LocalEditorOptions {
 }
 
 const ROLES:Record<string,[Role,boolean,boolean]>={talk:['a-roll',false,false],voiceover:['a-roll',true,false],broll:['b-roll',false,false],
-  screen:['screen',false,false],screen_synced:['screen',false,true],music:['music',false,false],sfx:['sfx',false,false]};
+  screen:['screen',false,false],screen_synced:['screen',false,true],music:['music',false,false],sfx:['sfx',false,false],
+  camera:['other',false,true],mic:['mic',false,true]};
 const STYLES=Object.keys(STYLE_PRESETS) as [string,...string[]];
 
 /** Editor tools before a project opens: descriptions do not depend on the footage, so list them from an empty workspace. */
@@ -115,20 +117,21 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
     {name:'editing_guide',description:'How to edit well with these tools: workflow, cutting, rhythm, zoom, captions, footage. Read it before the first edit.',
       input:{},run:async()=>({text:guide()})},
 
-    {name:'open',description:'Start an edit from footage files: reads each file, transcribes speech (about 1 min per 10 min of speech), labels b-roll and screen clips with a vision model when the server has one (for find_footage; a few cents per minute of footage, kept for the next open) and opens the project in <folder>/.edit/. Starts over if an edit is already there (use resume to continue it). Roles: talk (the speaker on camera), voiceover (sound only; the picture is your footage), broll, screen, screen_synced (a screen recorded together with the speaker), music, sfx. The clips in the cut set the picture\'s shape: a speaker in it, else the shape with the most screen time. A talk clip with no spoken words opens as broll, with a warning. Lists the clips when done.',
+    {name:'open',description:'Start an edit from footage files: reads each file, transcribes speech (about 1 min per 10 min of speech), labels b-roll and screen clips with a vision model when the server has one (for find_footage; a few cents per minute of footage, kept for the next open) and opens the project in <folder>/.edit/. Starts over if an edit is already there (use resume to continue it). Roles: talk (the speaker on camera), voiceover (sound only; the picture is your footage), broll, screen, screen_synced (a screen recorded together with the speaker), music, sfx. The clips in the cut set the picture\'s shape: a speaker in it, else the shape with the most screen time. A talk clip with no spoken words opens as broll, with a warning. Lists the clips when done. '+OPEN_MEDIA_NOTE,
       input:{folder:folderArg,
         files:z.array(z.object({path:z.string().describe('absolute, or relative to folder'),role:z.enum(Object.keys(ROLES) as [string,...string[]])})).min(1),
         format:z.enum(['vertical','horizontal']).optional().describe('voiceover only: the picture\'s shape; default the first footage\'s'),
         style:z.string().max(80).optional().describe(`edit style: a preset (${STYLES.join(', ')}) or a style folder by name (styles lists them): its rules, measured pace and brand load into the brief`),
         usage:z.string().max(40).optional().describe('style folder only: which measured set (long, short...); default its only one'),
         target:z.number().positive().max(3600).optional().describe('target length, seconds'),
-        note:z.string().max(2000).optional().describe('what the creator asked for')},
-      run:async({folder,files,format,style,usage,target,note},ctx)=>{
+        note:z.string().max(2000).optional().describe('what the creator asked for'),
+        proxies:z.boolean().optional().describe('make light 720p copies of heavy video (default true)')},
+      run:async({folder,files,format,style,usage,target,note,proxies},ctx)=>{
         const a=projectAt(folderOf(folder)),lines:string[]=[];
         const log=(l:string)=>{lines.push(l);console.error(l);ctx.progress(lines.length,undefined,l.trim());};
         const of=(files as {path:string;role:string}[]).map(f=>{const [role,voice,synced]=ROLES[f.role]!;return {path:f.path,role,voice,synced} satisfies OpenFile;});
         const styled=style&&!isPreset(style)?await useStyle(await root(),style,usage):undefined;
-        await openProject(a,{files:of,...(format?{format}:{}),...(style&&!styled?{style}:{}),...(styled?{styled}:{}),...(target?{target}:{}),...(note?{instruction:note}:{}),vision},log);
+        await openProject(a,{files:of,...(format?{format}:{}),...(style&&!styled?{style}:{}),...(styled?{styled}:{}),...(target?{target}:{}),...(note?{instruction:note}:{}),proxies:proxies!==false,vision},log);
         await load(a);
         return {text:`${lines.join('\n')}\n\nOpen: ${a.folder}\nclips:\n${clipLines(open!.ws)}\n\n${brief(open!.ws)}`};
       }},

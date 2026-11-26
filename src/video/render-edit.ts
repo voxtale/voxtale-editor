@@ -6,12 +6,12 @@ import {ffmpegPath,ffprobePath} from './ffmpeg-path';
 // edit with thousands of cuts stays cheap), each chunk once for picture and once
 // for sound. Chunks join by stream copy, then one loudness pass lands the mix on
 // the edit's target, as the desktop export does.
-import {mkdir,rm,writeFile} from 'node:fs/promises';
+import {mkdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {
   CAPTION_DIM,CAPTION_POP,captionLook,captionPlacement,captionText,captionWords,cutFade,dbToVolume,duckPoints,lanes,limiterCeiling,loudnessGain,mixSpeech,parseLoudness,
   shown,textContent,toSrt,textLook,textPosition,pipBox,soundSpans,transitionJoins,zoomKeysBetween,
-  SETTLE_BACK,activeGrade,lutFor,writeCube,LUT_SIZE,type Easing,type EditDoc,type LoudnessLevel,type ZoomKey,type ZoomProperty,
+  SETTLE_BACK,clipLut,parseCube,pictureSource,soundSource,syncRange,writeCube,LUT_SIZE,type Easing,type EditDoc,type LoudnessLevel,type ZoomKey,type ZoomProperty,
 } from '@voxtale/editdoc';
 import {run} from './media';
 import {writeLibrary} from './sfx';
@@ -81,7 +81,8 @@ export interface RenderEditResult {
   loudness?:{before:LoudnessLevel;gainDb:number;after?:LoudnessLevel};
   /** Clips drawn through a colour grade (their 3D LUT). */
   graded?:string[];
-  skipped:{itemId:string;reason:'graphic-not-ready'}[];
+  /** Items drawn or heard other than asked: a graphic still rendering, an angle/mic/companion that does not cover the piece (master used). */
+  skipped:{itemId:string;reason:'graphic-not-ready'|'angle-out-of-range'|'mic-out-of-range'|'companion-out-of-range'}[];
 }
 
 export class MissingMediaError extends Error {
@@ -150,6 +151,33 @@ const frameAt=(t:number,fps:number)=>Math.ceil(t*fps-1e-6)||0;
 
 const TRACK_DRAW=['a-roll','b-roll','graphics'] as const;
 
+/** Split layout: left and right halves, or top and bottom on a tall canvas. */
+export function splitBoxes(c:{width:number;height:number}):[NonNullable<Picture['box']>,NonNullable<Picture['box']>] {
+  if(c.height>c.width) {
+    const h=Math.round(c.height/2/2)*2;
+    return [{x:0,y:0,width:c.width,height:h},{x:0,y:h,width:c.width,height:c.height-h}];
+  }
+  const w=Math.round(c.width/2/2)*2;
+  return [{x:0,y:0,width:w,height:c.height},{x:w,y:0,width:c.width-w,height:c.height}];
+}
+
+/**
+ * A piece's companions with their source in-point: through the sync group
+ * when both clips are in one (it beats a stored offset), else the stored
+ * offset. Companions that do not hold the whole piece drop out.
+ */
+function companionsOf(doc:EditDoc,a:EditDoc['tracks']['a-roll'][number],shown:string):{clipId:string;in:number}[] {
+  const out:{clipId:string;in:number}[]=[];
+  for(const m of a.companions??[]) {
+    if(m.clipId===shown)continue;
+    const r=syncRange(doc.groups,doc.clips,a.clipId,a.in,a.out,m.clipId);
+    if(r) {out.push({clipId:m.clipId,in:r.in});continue;}
+    const c=doc.clips.find(x=>x.id===m.clipId),inn=a.in+m.offset;
+    if(c&&inn>=-0.05&&a.out+m.offset<=c.duration+0.05)out.push({clipId:m.clipId,in:Math.max(0,inn)});
+  }
+  return out;
+}
+
 /** What to draw and play, bottom layer first. Throws MissingMediaError when a clip's file is not in `media`. */
 export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Record<string,string>={},luts:Record<string,string>={}):RenderPlan {
   const fps=doc.fps.num/doc.fps.den;
@@ -180,15 +208,30 @@ export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Reco
         continue;
       }
       const c=item as EditDoc['tracks']['a-roll'][number]|EditDoc['tracks']['b-roll'][number];
-      const clip=clips.get(c.clipId);
-      const path=pathOf(c.clipId);
       const b=kind==='b-roll'?c as EditDoc['tracks']['b-roll'][number]:null;
+      const a=kind==='a-roll'?c as EditDoc['tracks']['a-roll'][number]:null;
+      // Multicam: the picture comes from the piece's angle, read in step through its sync group.
+      const src=a?pictureSource(doc,a):{clipId:c.clipId,in:c.in,out:c.out,fellBack:false};
+      if(src.fellBack)skipped.push({itemId:c.id,reason:'angle-out-of-range'});
+      const clip=clips.get(src.clipId);
+      const path=pathOf(src.clipId);
+      const two=a?companionsOf(doc,a,src.clipId):[];
+      const split=a?.layout==='split'&&two.length>0,pip=a?.layout==='pip'&&two.length>0;
+      if((a?.layout==='split'||a?.layout==='pip')&&!two.length)skipped.push({itemId:c.id,reason:'companion-out-of-range'});
+      const halves=split?splitBoxes(doc.canvas):null;
       pictures.push({
-        itemId:c.id,path,kind:clip?.kind==='image'?'image':'video',fs,fe,start:c.start,in:c.in,
+        itemId:c.id,path,kind:clip?.kind==='image'?'image':'video',fs,fe,start:c.start,in:src.in,
         fit:b?b.fit:'cover',opacity:b?b.opacity:1,
-        zoom:kind==='a-roll'?zoomKeysBetween(doc.tracks.zoom,c.start,c.end,doc.canvas):[],
-        ...(b?.crop?{crop:b.crop}:{}),...(b?.speed&&b.speed!==1?{speed:b.speed}:{}),...(luts[c.clipId]?{lut:luts[c.clipId]}:{}),
+        zoom:a&&!split?zoomKeysBetween(doc.tracks.zoom,c.start,c.end,doc.canvas):[],
+        ...(halves?{box:halves[0]}:{}),
+        ...(b?.crop?{crop:b.crop}:{}),...(b?.speed&&b.speed!==1?{speed:b.speed}:{}),...(luts[src.clipId]?{lut:luts[src.clipId]}:{}),
       });
+      // Split: the companion beside (or under, on a tall canvas); pip: the first companion small in a corner.
+      const m=two[0];
+      if(m&&(split||pip)) {
+        const box=split?halves![1]:pipBox(doc.canvas,a!.pipCorner??'bottom-right');
+        pictures.push({itemId:`${c.id}.${split?'split':'pip'}`,path:pathOf(m.clipId),kind:clips.get(m.clipId)?.kind==='image'?'image':'video',fs,fe,start:c.start,in:m.in,fit:'cover',opacity:1,zoom:[],box,...(luts[m.clipId]?{lut:luts[m.clipId]}:{})});
+      }
     }
     if(kind!=='graphics')applyTransitions(doc,kind,pictures,fps);
     applyFades(items as Faded[],pictures);
@@ -213,7 +256,13 @@ export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Reco
     // -60 dB is the floor: a muted item (a shot placed without its sound) plays nothing.
     if(!sounding(a.clipId)||a.gainDb<=-60)continue;
     const f=cutFade(doc,end-start);
-    sounds.push({path:pathOf(a.clipId),start,end,in:inn,volume:dbToVolume(a.gainDb+mix.speechGainDb),fadeIn:f,fadeOut:f,duck:[]});
+    // Multicam: the sound comes from the piece's mic, in step; a clip's avOffset moves its sound later.
+    const mic=soundSource(doc,{clipId:a.clipId,in:inn,out:inn+(end-start),mic:a.mic});
+    const id=mic.fellBack?a.clipId:mic.clipId;
+    if(mic.fellBack)skipped.push({itemId:a.id,reason:'mic-out-of-range'});
+    const shifted=mic.in-(clips.get(id)?.avOffset??0),late=Math.max(0,-shifted);
+    if(late>=end-start)continue;
+    sounds.push({path:pathOf(id),start:start+late,end,in:shifted+late,volume:dbToVolume(a.gainDb+mix.speechGainDb),fadeIn:f,fadeOut:f,duck:[]});
   }
   for(const b of shown(doc.tracks['b-roll'])) {
     if(b.muted||!sounding(b.clipId))continue;
@@ -624,10 +673,16 @@ async function channelCounts(ffprobe:string,paths:string[],signal?:AbortSignal):
 }
 
 /** A .cube per clip with an active grade, clip id → file. */
+/**
+ * One .cube per clip that needs one: its input (the creator's inputLut, else
+ * the log/HDR conversion of its colour space), then its grade. A broken
+ * inputLut throws: rendering log footage without it would look wrong.
+ */
 export async function writeLuts(doc:EditDoc,dir:string):Promise<Record<string,string>> {
   const out:Record<string,string>={};
   for(const c of doc.clips) {
-    const g=activeGrade(c.grade),lut=g&&lutFor(g);
+    const cube=c.inputLut?parseCube(await readFile(c.inputLut,'utf8')):null;
+    const lut=clipLut(c,cube);
     if(!lut)continue;
     await mkdir(dir,{recursive:true});
     const f=join(dir,`${c.id.replace(/[^\w.-]/g,'_')}.cube`);

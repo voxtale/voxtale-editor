@@ -4,6 +4,8 @@ export * from "./time";
 export * from "./style";
 export * from "./schema";
 export * from "./grade";
+export * from "./sync";
+export * from "./camera-log";
 export * from "./timeline";
 export * from "./validate";
 export * from "./policy";

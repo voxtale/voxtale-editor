@@ -8,7 +8,10 @@ import {createHash} from 'node:crypto';
 import {createReadStream,existsSync} from 'node:fs';
 import {mkdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {basename,dirname,join,resolve} from 'node:path';
-import {clipRefSchema,handEdits,parseEditDoc,parseLoudness,type ClipRef,type EditDoc,type EditStyle} from '@voxtale/editdoc';
+import {clipRefSchema,groupFromStarts,handEdits,overlapSeconds,parseEditDoc,parseLoudness,FORMULAS,SYNC_CONFIDENCE_MIN,type ClipRef,type EditDoc,type EditStyle,type SyncGroup} from '@voxtale/editdoc';
+import {detectColor,makeProxy,mediaInfo,needsProxy} from '../../footage-media';
+import {activityLevels,decodeMono,envelope,placeBySound,SYNC_RATE} from '../../sound-sync';
+import {syncFromGroups} from '../agent/multicam';
 
 import {beatsOfFile} from '../../beats';
 import type {FaceFinder,VisionModel} from '../../footage-index';
@@ -28,17 +31,23 @@ import {AGENT_EDIT,matchLevels,save,type Workspace} from '../agent/tools';
 const FFPROBE=ffprobePath();
 
 export type Log=(line:string)=>void;
-export type Role='a-roll'|'b-roll'|'screen'|'music'|'sfx';
+export type Role='a-roll'|'b-roll'|'screen'|'music'|'sfx'|'mic'|'other';
 /** voice: sound only (a voiceover); synced: recorded with the speaker, from the same start. */
 export interface OpenFile {path:string;role:Role;voice:boolean;synced:boolean}
 export type Format='vertical'|'horizontal';
 /** format: the picture for a voiceover-only edit; with a speaker on camera, their clip sets it. */
-export interface OpenOptions {files:OpenFile[];style?:string;target?:number;instruction?:string;format?:Format;
+export interface OpenOptions {files:OpenFile[];
+  /** false: no light copies; previews read the originals (slow on 4K or 10-bit). */
+  proxies?:boolean;style?:string;target?:number;instruction?:string;format?:Format;
   /** A style folder, resolved (../styles/use): its EditStyle wins over `style`. */
   styled?:{style:EditStyle;use:StyleUse};
   /** Labels footage for find_footage and screen_activity; null = transcribe only (the reason is logged). */
   vision?:VisionModel|null}
-export interface Project {job:Job;sources:Record<string,string>;voiceover:boolean}
+export interface Project {job:Job;sources:Record<string,string>;voiceover:boolean;
+  /** Light 720p copies by clip hash: previews, filmstrips and look samples read these; the render reads `sources`. */
+  proxies?:Record<string,string>;
+  /** Clips recorded together, found by their sound at open, with each member's level per `step` seconds. */
+  multicam?:{groups:SyncGroup[];levels:Record<string,number[]>;step:number}}
 /** What a project needs from this machine: a face finder for zoom, a renderer for graphics. */
 export interface Ports {faces?:FaceFinder;html?:HtmlRenderer}
 
@@ -95,7 +104,7 @@ export function noSpeech(e:unknown):boolean {
   return e instanceof Error&&/requires video footage with an audio track|no spoken audio/i.test(e.message);
 }
 
-async function loadClip(a:At,id:string,path:string,role:Role,log:Log):Promise<{clip:JobClip;hash:string}> {
+async function loadClip(a:At,id:string,path:string,role:Role,log:Log,o:{proxy?:boolean}={}):Promise<{clip:JobClip;hash:string;proxy?:string}> {
   const info=await probe(path),hash=await sha256(path);
   const kind=info.width?'video':'audio';
   let words:JobClip['words']=[];
@@ -114,11 +123,20 @@ async function loadClip(a:At,id:string,path:string,role:Role,log:Log):Promise<{c
     }
   }
   const level=info.audio&&role!=='b-roll'&&role!=='screen'?await loudness(path):undefined;
+  // Log or HDR footage: converted to Rec.709 before the look (camera-log.ts); a light copy for editing when big.
+  const media=kind==='video'?await mediaInfo(path).catch(()=>null):null;
+  const color=media?await detectColor(path,media).catch(()=>undefined):undefined;
+  if(color&&(color.log||color.hdr))log(`${basename(path)}: ${color.log??color.hdr?.toUpperCase()} (${color.why})${color.log&&!FORMULAS[color.log]?': no built-in conversion, set an input LUT (set_look inputLut)':''}`);
+  let proxy:string|undefined;
+  if(media&&o.proxy!==false&&needsProxy(media)) {
+    log(`light copy of ${basename(path)} for editing (${media.width}x${media.height} ${media.codec} ${media.pixFmt})…`);
+    proxy=await makeProxy(path,join(a.dir,'proxies',`${hash.slice(0,16)}.mp4`)).catch(e=>{log(`warning: no light copy of ${basename(path)}: ${(e as Error).message}`);return undefined;});
+  }
   // Music: its beat, so joins and shots can land on it.
   const beats=role==='music'&&info.audio?await beatsOfFile(path,ff).catch(()=>undefined):undefined;
   const ref:ClipRef=clipRefSchema.parse({id,hash,name:basename(path),kind,role,roleSource:'creator',duration:info.duration,fps:fps(info.rate),
-    ...(kind==='video'?{width:info.width,height:info.height}:{}),hasAudio:info.audio,timecodeStart:0,...(level?{loudness:level}:{}),...(beats?{beats}:{})});
-  return {clip:{ref,words},hash};
+    ...(kind==='video'?{width:info.width,height:info.height}:{}),hasAudio:info.audio,timecodeStart:0,...(level?{loudness:level}:{}),...(beats?{beats}:{}),...(color?{color}:{})});
+  return {clip:{ref,words},hash,...(proxy?{proxy}:{})};
 }
 
 /** A voiceover becomes a black video with that sound, so the editor can cut it like a speaker. */
@@ -131,13 +149,40 @@ async function voiceVideo(a:At,audio:string,format:Format):Promise<string> {
   return out;
 }
 
+/** Overlap below this many seconds makes a sound match doubtful (a chance echo). */
+const SYNC_OVERLAP_MIN=10;
+
+/**
+ * One sync group from the clips' sound (local ffmpeg, no network): who
+ * starts when on a shared clock, and each one's level for picking the active
+ * mic. Clips no sure match reaches stay out.
+ */
+async function groupBySound(clips:JobClip[],sources:Record<string,string>,log:Log):Promise<Project['multicam']> {
+  log(`lining up ${clips.length} clips by their sound…`);
+  const decoded=await Promise.all(clips.map(async c=>({clipId:c.ref.id,pcm:await decodeMono(sources[c.ref.hash]!).catch(()=>null)})));
+  const ok=decoded.filter((d):d is {clipId:string;pcm:Float32Array}=>!!d.pcm&&d.pcm.length>SYNC_RATE);
+  const placed=placeBySound(ok.map(d=>({clipId:d.clipId,env:envelope(d.pcm)})));
+  let g=groupFromStarts('g1',placed.filter(p=>p.start!==undefined).map(p=>({clipId:p.clipId,start:p.start!,...(p.confidence!==undefined?{confidence:p.confidence}:{})})));
+  const refs=clips.map(c=>c.ref);
+  if(g) {
+    const kept=g.members.filter(m=>g!.members.some(o=>o.clipId!==m.clipId&&overlapSeconds(g!,refs,m.clipId,o.clipId)>=SYNC_OVERLAP_MIN));
+    g=kept.length>=2?{...g,members:kept}:null;
+  }
+  for(const p of placed)if(!g?.members.some(m=>m.clipId===p.clipId))log(`warning: ${p.clipId} did not line up by sound${p.confidence!==undefined?` (match ${p.confidence.toFixed(1)}, sure from ${SYNC_CONFIDENCE_MIN})`:''}: kept as is`);
+  if(!g)return undefined;
+  for(const m of g.members)log(`${m.clipId} starts at ${m.start.toFixed(3)}s on the shared clock${m.confidence?` (match ${m.confidence.toFixed(1)})`:''}`);
+  const levels=Object.fromEntries(ok.filter(d=>g!.members.some(m=>m.clipId===d.clipId)).map(d=>[d.clipId,activityLevels(d.pcm,SYNC_RATE,0.1).map(v=>Math.round(v*10)/10)]));
+  return {groups:[g],levels,step:0.1};
+}
+
 /** Read the footage, transcribe speech and save a fresh project (an edit already there starts over). */
 export async function openProject(a:At,o:OpenOptions,log:Log):Promise<void> {
   const files=o.files.map(f=>({...f,path:resolve(a.folder,f.path)}));
   if(!files.some(f=>f.role!=='music'&&f.role!=='sfx'))throw new Error('need a talking-head clip, a voiceover file or footage');
   for(const f of files)if(!existsSync(f.path))throw new Error(`no such file: ${f.path}`);
   await mkdir(a.dir,{recursive:true});
-  const clips:JobClip[]=[],sources:Record<string,string>={},synced:string[]=[];
+  await mkdir(join(a.dir,'proxies'),{recursive:true});
+  const clips:JobClip[]=[],sources:Record<string,string>={},proxies:Record<string,string>={},synced:string[]=[];
   // Voiceover only: the picture takes the creator's format, else the first footage's shape.
   const shape=async():Promise<Format>=>{
     for(const f of files.filter(f=>f.role==='b-roll'||f.role==='screen')) {
@@ -151,7 +196,8 @@ export async function openProject(a:At,o:OpenOptions,log:Log):Promise<void> {
   // Speaking clips first: the first one sets the canvas.
   for(const f of [...files.filter(f=>f.role==='a-roll'),...files.filter(f=>f.role!=='a-roll')]) {
     const path=f.voice?await voiceVideo(a,f.path,format!):f.path;
-    const {clip,hash}=await loadClip(a,`c${++n}`,path,f.role,log);
+    const {clip,hash,proxy}=await loadClip(a,`c${++n}`,path,f.role,log,{proxy:o.proxies});
+    if(proxy)proxies[hash]=proxy;
     if(f.voice)clip.ref={...clip.ref,name:basename(f.path)};
     clips.push(clip);
     if(f.synced)synced.push(clip.ref.id);
@@ -161,10 +207,19 @@ export async function openProject(a:At,o:OpenOptions,log:Log):Promise<void> {
   const job=newJob({id:'edit',name:basename(a.folder),clips,style:o.styled?.style??styleFor(o.style),synced,
     ...(o.styled?{styleUse:o.styled.use,rules:o.styled.use.rules}:{}),
     ...(o.target?{targetSeconds:o.target}:{}),...(o.instruction?{instruction:o.instruction}:{})});
-  for(const s of job.sync??[])log(`${s.clip} recorded with ${s.with} (same clock): show it with sync:true`);
+  // Several cameras or mics: line them up by their sound, so cuts stay in step on every one.
+  const groupable=clips.filter(c=>c.ref.hasAudio&&(c.ref.role==='a-roll'||c.ref.role==='mic'||synced.includes(c.ref.id)));
+  const multicam=groupable.length>=2?await groupBySound(groupable,sources,log):undefined;
+  const talk=clips.find(c=>c.ref.role==='a-roll'&&c.words.length);
+  if(multicam&&talk) {
+    const found=syncFromGroups(multicam.groups,talk.ref.id);
+    job.sync=[...(job.sync??[]).filter(s=>!found.some(x=>x.clip===s.clip)),...found];
+  }
+  for(const s of job.sync??[])log(`${s.clip} recorded with ${s.with} (same clock${s.offset?`, ${s.offset>0?'+':''}${s.offset.toFixed(3)}s`:''}): show it with sync:true`);
   if(o.vision)await labelFootage(a,job,sources,o.vision,log);
   else if(understandClips(job).length)log('footage not labelled (no OPENROUTER_API_KEY): find_footage and screen_activity are off; look with timeline_view');
-  await writeFile(projectFile(a),JSON.stringify({job,sources,voiceover:files.some(f=>f.voice)} satisfies Project,null,1));
+  await writeFile(projectFile(a),JSON.stringify({job,sources,voiceover:files.some(f=>f.voice),
+    ...(Object.keys(proxies).length?{proxies}:{}),...(multicam?{multicam}:{})} satisfies Project,null,1));
   await writeFile(join(a.dir,'state.json'),'{}');
   await writeFile(sessionFile(a),'{}');
   // Starting over: the last edit is not the creator's to keep.
@@ -238,11 +293,14 @@ function cachedVoice(a:At,frames:FrameHost):FrameHost {
 export async function loadProject(a:At,ports:Ports={}):Promise<{p:Project;ws:Workspace}> {
   if(!hasProject(a))throw new Error(`no project here: open one first (looked in ${a.dir})`);
   const p:Project=JSON.parse(await readFile(projectFile(a),'utf8'));
-  const frames=cachedVoice(a,localFrames({sources:p.sources,dir:join(a.dir,'looks'),ff,...(ports.html?{html:ports.html}:{})}));
+  // Previews and samples read the light copies; the render reads the originals (renderProject: p.sources).
+  const frames=cachedVoice(a,localFrames({sources:{...p.sources,...p.proxies},dir:join(a.dir,'looks'),ff,...(ports.html?{html:ports.html}:{})}));
   const ws=newWorkspace({dir:a.dir,job:p.job,frames,graphics:!!ports.html,...(ports.faces?{eyes:eyeFinder(frames.frames,ports.faces)}:{})});
   // state.json is what save() writes; null fields (music cleared) mean "none".
   const state=await readJson<Record<string,unknown>>(join(a.dir,'state.json'),{});
   for(const [k,v] of Object.entries(state))if(v!==null&&v!==undefined)(ws as unknown as Record<string,unknown>)[k]=v;
+  if(p.multicam)ws.syncGroups=p.multicam;
+  ws.media=p.sources;
   const {eyes,...session}=await readJson<Session>(sessionFile(a),{});
   // Eyes found on earlier calls, so the face model runs once per cut frame.
   if(eyes)ws.eyeCache=new Map(eyes);
