@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "voxtale_editor",
+  "project_id": "aa5a727b-80f3-4459-bff6-24a29c162dc5"
+}
