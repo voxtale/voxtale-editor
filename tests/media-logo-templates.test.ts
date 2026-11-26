@@ -1,6 +1,9 @@
 // Last REDACTED gaps: proxy shapes, A/V check at open, templates, logo, cut-out stills, D-Log M. Pure parts, no ffmpeg.
 import {describe,expect,it} from 'bun:test';
-import {proxyFits,proxyToSource} from '../src/video/footage-media';
+import {mkdtempSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {makerLut,proxyFits,proxyToSource} from '../src/video/footage-media';
 import {avCheckOn,avOffsetNote} from '../src/video/editor/local-mcp/project';
 
 describe('proxy frame sizes (60q)',()=>{
@@ -35,5 +38,16 @@ describe('A/V offset at open (c7h)',()=>{
     expect(s).toContain('200ms ahead');
     expect(s).toContain('set_av_offset c1');
     expect(avOffsetNote('c2',{offset:-0.04,confidence:6},25)).toContain('behind');
+  });
+});
+
+describe('DJI D-Log M (bq4)',()=>{
+  it('finds the fetched maker LUT, nothing when absent or for formula profiles',()=>{
+    const d=mkdtempSync(join(tmpdir(),'luts-'));
+    expect(makerLut('DJI D-Log M',d)).toBeUndefined();
+    writeFileSync(join(d,'DJI D-Log M to Rec.709.cube'),'LUT_3D_SIZE 2\n');
+    expect(makerLut('DJI D-Log M',d)).toBe(join(d,'DJI D-Log M to Rec.709.cube'));
+    expect(makerLut('Sony S-Log3/S-Gamut3.Cine',d)).toBeUndefined();
+    expect(makerLut(undefined,d)).toBeUndefined();
   });
 });

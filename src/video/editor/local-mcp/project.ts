@@ -9,7 +9,7 @@ import {createReadStream,existsSync} from 'node:fs';
 import {mkdir,readFile,rm,writeFile} from 'node:fs/promises';
 import {basename,dirname,join,resolve} from 'node:path';
 import {clipRefSchema,groupFromStarts,handEdits,overlapSeconds,parseEditDoc,parseLoudness,FORMULAS,SYNC_CONFIDENCE_MIN,type ClipRef,type EditDoc,type EditStyle,type SyncGroup} from '@voxtale/editdoc';
-import {detectColor,makeProxy,mediaInfo,needsProxy,proxyFits} from '../../footage-media';
+import {detectColor,makeProxy,makerLut,mediaInfo,needsProxy,proxyFits} from '../../footage-media';
 import {activityLevels,decodeMono,envelope,measureAvOffset,placeBySound,SYNC_RATE} from '../../sound-sync';
 import {syncFromGroups} from '../agent/multicam';
 
@@ -139,7 +139,9 @@ async function loadClip(a:At,id:string,path:string,role:Role,log:Log,o:{proxy?:b
   // Log or HDR footage: converted to Rec.709 before the look (camera-log.ts); a light copy for editing when big.
   const media=kind==='video'?await mediaInfo(path).catch(()=>null):null;
   const color=media?await detectColor(path,media).catch(()=>undefined):undefined;
-  if(color&&(color.log||color.hdr))log(`${basename(path)}: ${color.log??color.hdr?.toUpperCase()} (${color.why})${color.log&&!FORMULAS[color.log]?': no built-in conversion, set an input LUT (set_look inputLut)':''}`);
+  // No formula but the maker's LUT fetched (tools/fetch-dji-luts.sh): used as the clip's input LUT.
+  const lut=color?.log&&!FORMULAS[color.log]?makerLut(color.log):undefined;
+  if(color&&(color.log||color.hdr))log(`${basename(path)}: ${color.log??color.hdr?.toUpperCase()} (${color.why})${lut?`: converted with ${basename(lut)}`:color.log&&!FORMULAS[color.log]?`: no built-in conversion, set an input LUT (set_look inputLut)${color.log==='DJI D-Log M'?' or run tools/fetch-dji-luts.sh and open again':''}`:''}`);
   let proxy:string|undefined;
   if(media&&o.proxy!==false&&needsProxy(media)) {
     log(`light copy of ${basename(path)} for editing (${media.width}x${media.height} ${media.codec} ${media.pixFmt})…`);
@@ -161,7 +163,7 @@ async function loadClip(a:At,id:string,path:string,role:Role,log:Log,o:{proxy?:b
   // Music: its beat, so joins and shots can land on it.
   const beats=role==='music'&&info.audio?await beatsOfFile(path,ff).catch(()=>undefined):undefined;
   const ref:ClipRef=clipRefSchema.parse({id,hash,name:basename(path),kind,role,roleSource:'creator',duration:info.duration,fps:fps(info.rate),
-    ...(kind==='video'?{width:info.width,height:info.height}:{}),hasAudio:info.audio,timecodeStart:0,...(level?{loudness:level}:{}),...(beats?{beats}:{}),...(color?{color}:{})});
+    ...(kind==='video'?{width:info.width,height:info.height}:{}),hasAudio:info.audio,timecodeStart:0,...(level?{loudness:level}:{}),...(beats?{beats}:{}),...(color?{color}:{}),...(lut?{inputLut:lut}:{})});
   return {clip:{ref,words},hash,...(proxy?{proxy}:{})};
 }
 

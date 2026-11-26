@@ -2,7 +2,9 @@
 // tags. From that: does it need a light proxy for editing, and is it log or
 // HDR footage that must be converted to Rec.709 before the look.
 // Local ffmpeg/ffprobe only.
+import {existsSync} from 'node:fs';
 import {open,rename,rm,stat} from 'node:fs/promises';
+import {join} from 'node:path';
 import type {ClipColor} from '@voxtale/editdoc';
 import {ffmpegPath,ffprobePath} from './ffmpeg-path';
 
@@ -74,6 +76,16 @@ export function proxyFits(source:Size,proxy:Size):boolean {
 export function proxyToSource<T extends {x:number;y:number;w?:number;h?:number}>(p:T,proxy:Size,source:Size):T {
   const kx=source.width/proxy.width,ky=source.height/proxy.height;
   return {...p,x:p.x*kx,y:p.y*ky,...(p.w!==undefined?{w:p.w*kx}:{}),...(p.h!==undefined?{h:p.h*ky}:{})};
+}
+
+/** Maker LUTs fetched by tools/fetch-dji-luts.sh; VOXTALE_EDITOR_LUTS points elsewhere. */
+export const LUT_DIR=process.env.VOXTALE_EDITOR_LUTS??join(import.meta.dir,'..','..','models','luts');
+const MAKER_LUTS:Record<string,string>={'DJI D-Log M':'DJI D-Log M to Rec.709.cube'};
+
+/** The maker's .cube for a log profile with no formula, when it has been fetched. bd voxtale-editor-bq4. */
+export function makerLut(profile:string|undefined,dir=LUT_DIR):string|undefined {
+  const f=profile&&MAKER_LUTS[profile];
+  return f&&existsSync(join(dir,f))?join(dir,f):undefined;
 }
 
 // Darkest point of 3 frames (10-bit, video black = 0, white = 1), measured
