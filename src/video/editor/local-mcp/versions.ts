@@ -57,15 +57,67 @@ async function freeze(edit:string,i:VersionIndex,now:Date):Promise<VersionIndex>
   return {...i,current:i.current+1,frozen:[...i.frozen,{n:i.current,at:now.toISOString(),...i.working}],working:undefined};
 }
 
+/** The content of each edit file, null where it is missing. */
+export type EditFiles=Record<(typeof VERSION_FILES)[number],string|null>;
+export async function readEditFiles(dir:string):Promise<EditFiles> {
+  const out={} as EditFiles;
+  for(const f of VERSION_FILES)out[f]=existsSync(join(dir,f))?await readFile(join(dir,f),'utf8'):null;
+  return out;
+}
+/** The files that say what the edit is. project.json and session.json are written again on every call, so they never count as a change. */
+const MARKS=['edit.json','state.json'] as const;
+export const sameEdit=(a:EditFiles,b:EditFiles)=>MARKS.every(f=>a[f]===b[f]);
+/** The newest frozen version still on disk: what a new freeze would repeat. */
+async function lastFrozen(edit:string,i:VersionIndex):Promise<EditFiles|undefined> {
+  const n=i.frozen.at(-1)?.n;
+  return n!==undefined&&existsSync(vDir(edit,n))?readEditFiles(vDir(edit,n)):undefined;
+}
+
+/** A version call's result; `same`: the working edit matched the last version, so nothing new was frozen. */
+export type VersionResult=VersionIndex&{same?:boolean};
+
 /**
  * Start the next version: the working edit is kept as it is (frozen), and
  * the working files go on unchanged as the new number, for this request's
- * changes. `note` says what the new version is for.
+ * changes. `note` says what the new version is for. When the working edit
+ * is the last version unchanged, nothing is frozen twice: the note goes on
+ * the working version.
  */
-export async function newVersion(edit:string,note?:string,now=new Date()):Promise<VersionIndex> {
+export async function newVersion(edit:string,note?:string,now=new Date()):Promise<VersionResult> {
   if(!existsSync(join(edit,'project.json')))throw new Error('no project here: open one first');
-  const i=await freeze(edit,await readVersions(edit),now);
+  const before=await readVersions(edit);
+  const last=await lastFrozen(edit,before);
+  if(last&&sameEdit(last,await readEditFiles(edit)))return noteWorking(edit,note);
+  const i=await freeze(edit,before,now);
   const next={...i,...(note?{working:{note}}:{})};
+  await writeIndex(edit,next);
+  return next;
+}
+
+/** Name the working version without freezing anything (the server kept the version already). */
+export async function noteWorking(edit:string,note?:string):Promise<VersionResult> {
+  const i=await readVersions(edit);
+  const next={...i,...(note?{working:{...i.working,note}}:{})};
+  await writeIndex(edit,next);
+  return {...next,same:true};
+}
+
+/**
+ * The server's own version, for an agent that forgot new_version: `files`
+ * is the edit as it was before the call that changed it, frozen as
+ * v<current>; the working files (already changed) go on as current+1.
+ * Nothing is frozen when there was no cut yet or it repeats the last version.
+ */
+export async function keepBefore(edit:string,files:EditFiles,note:string,now=new Date()):Promise<VersionIndex|undefined> {
+  if(files['edit.json']===null)return undefined;
+  const i=await readVersions(edit);
+  const last=await lastFrozen(edit,i);
+  if(last&&sameEdit(last,files))return undefined;
+  const dir=vDir(edit,i.current);
+  if(existsSync(dir))throw new Error(`version ${i.current} is already frozen in ${dir}; versions/index.json is out of step`);
+  await mkdir(dir,{recursive:true});
+  for(const f of VERSION_FILES){const c=files[f];if(c!==null)await writeFile(join(dir,f),c,{flag:'wx'});}
+  const next:VersionIndex={...i,current:i.current+1,frozen:[...i.frozen,{n:i.current,at:now.toISOString(),...i.working,note:i.working?.note??note}],working:undefined};
   await writeIndex(edit,next);
   return next;
 }

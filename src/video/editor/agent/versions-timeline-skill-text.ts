@@ -6,7 +6,7 @@ export const TIMELINE_DESCRIPTION='The edit as text, one line per item per track
 
 export const FIND_WORDS_DESCRIPTION='When words are heard in the CUT: each place a phrase is said, as output seconds (after cuts, J/L sound shifts and footage speed), with the clip, word ids and source second. get_transcript gives source times only; use this to land a title, a graphic or a sound on a word ("put the title where he says budget"). Matching ignores case, accents and punctuation. A phrase not heard says whether the cut dropped it or no transcript has it.';
 
-export const NEW_VERSION_DESCRIPTION='Start the next version of the edit before you change it for a new request: the edit as it is now is kept as a version, untouched, and you go on changing an exact copy. Call it once at the start of each creator request that changes the edit (not before every tool). note: what this version is for ("tighter hook", "music from the chorus").';
+export const NEW_VERSION_DESCRIPTION='Start the next version of the edit before you change it for a new request: the edit as it is now is kept as a version, untouched, and you go on changing an exact copy. Call it once at the start of each creator request that changes the edit (not before every tool). note: what this version is for ("tighter hook", "music from the chorus"). If you forget, the server keeps the edit as it was before your first change after open, resume or a long pause; new_version right after that only names it.';
 
 export const VERSIONS_DESCRIPTION='The versions of this edit, oldest first: number, when, its note, which one it was restored from, and the working one.';
 

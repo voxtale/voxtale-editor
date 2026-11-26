@@ -130,7 +130,7 @@ describe('edit versions',()=>{
   it('trash: frozen versions and scratch stills only, never the working one',async()=>{
     const d=await scratch(),sent:string[]=[];
     const trash=async(f:string)=>{sent.push(f);await rm(f,{recursive:true,force:true});};
-    await at(d,'a');await newVersion(d);await newVersion(d);
+    await at(d,'a');await newVersion(d);await writeFile(join(d,'edit.json'),'b');await newVersion(d);
     await expect(trashVersions(d,[3],trash)).rejects.toThrow('working version');
     await expect(trashVersions(d,[9],trash)).rejects.toThrow('no frozen version 9');
     const r=await trashVersions(d,[1],trash);
@@ -144,10 +144,82 @@ describe('edit versions',()=>{
     expect(await trashScratch(d,'all',trash)).toEqual(['preview']);
     expect(existsSync(join(d,'state.json'))).toBe(true);
   });
+  it('new_version twice with no change in between freezes once',async()=>{
+    const d=await scratch();
+    await at(d,'cut A');
+    await newVersion(d);
+    const i=await newVersion(d,'again');
+    expect(i.same).toBe(true);
+    expect(i.current).toBe(2);
+    expect(existsSync(join(d,'versions','v2'))).toBe(false);
+    expect(versionsText(i)).toMatch(/^v1  \S+ \S+\nv2  working  again$/);
+  });
   it('the local MCP lists the version tools',async()=>{
     const answer=mcpHandler(localEditorServer({folder:await scratch(),graphics:false},()=>()=>{}));
     const req=(method:string):Rpc=>({jsonrpc:'2.0',id:1,method,params:{}});
     const names=((await answer(req('tools/list')) as any).result.tools as {name:string}[]).map(t=>t.name);
     for(const n of ['new_version','versions','restore_version','trash','timeline','find_words'])expect(names).toContain(n);
+  });
+});
+
+describe('server versions for an agent that forgets new_version',()=>{
+  process.env.VOXTALE_EDITOR_UV='/nonexistent/uv';   // no face finder: nothing spawns
+  const natives=Promise.resolve({python:false,faceModel:false,subjectModel:false,missing:[]});
+  const project=async()=>{
+    const folder=await scratch();
+    await mkdir(join(folder,'.edit'),{recursive:true});
+    await writeFile(join(folder,'.edit','project.json'),JSON.stringify({job,sources:{},voiceover:false}));
+    return folder;
+  };
+  const server=(folder:string,versionIdle?:number)=>{
+    const answer=mcpHandler(localEditorServer({folder,graphics:false,vision:null,natives,...(versionIdle!==undefined?{versionIdle}:{})},()=>()=>{}));
+    return async(name:string,args:object={})=>{
+      const r=await answer({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}}) as any;
+      if(r.result.isError)throw new Error(r.result.content[0].text);
+      return r.result.content[0].text as string;
+    };
+  };
+  const cut=(to:number)=>({segments:[{clip:'c1',from:0,to}]});
+  const edit=(folder:string,v:string)=>readFile(join(folder,'.edit',v,'edit.json'),'utf8');
+
+  it('the first change after resume keeps the edit before it; reads and later changes do not',async()=>{
+    const folder=await project(),call=server(folder);
+    await call('resume');
+    await call('set_cut',cut(5));                     // nothing to keep yet: no cut before
+    expect(existsSync(join(folder,'.edit','versions','v1'))).toBe(false);
+    const first=await readFile(join(folder,'.edit','edit.json'),'utf8');
+    const again=server(folder);                       // a new session resumes the edit
+    await again('resume');
+    await again('timeline');                          // reading changes nothing
+    expect(existsSync(join(folder,'.edit','versions','v1'))).toBe(false);
+    expect(await again('set_cut',cut(9))).toContain('kept as v1; now on v2');
+    expect(await edit(folder,'versions/v1')).toBe(first);
+    await again('set_cut',cut(7));
+    expect(existsSync(join(folder,'.edit','versions','v2'))).toBe(false);
+  });
+  it('new_version right after the server kept one only names it; on its own it freezes as before',async()=>{
+    const folder=await project();
+    const one=server(folder);
+    await one('resume');await one('set_cut',cut(5));
+    const call=server(folder);
+    await call('resume');
+    await call('set_cut',cut(9));                     // server keeps v1
+    expect(await call('new_version',{note:'longer'})).toContain('v1 already holds the edit before this request');
+    expect(versionsText(await readVersions(join(folder,'.edit')))).toMatch(/^v1  .*kept by the server.*\nv2  working  longer$/);
+    // A second request in the same session: new_version freezes v2, and the change after it adds nothing.
+    expect(await call('new_version',{note:'shorter'})).toContain('v2 kept as it was. Now on v3');
+    expect(await call('set_cut',cut(3))).not.toContain('kept as');
+    expect((await readVersions(join(folder,'.edit'))).current).toBe(3);
+  });
+  it('a pause re-arms it, as a guess at a new creator message',async()=>{
+    const folder=await project();
+    const one=server(folder);
+    await one('resume');await one('set_cut',cut(5));
+    const call=server(folder,0.05);
+    await call('resume');
+    expect(await call('set_cut',cut(9))).toContain('kept as v1');
+    await new Promise(r=>setTimeout(r,80));
+    expect(await call('set_cut',cut(7))).toContain('kept as v2; now on v3');
+    expect(await call('set_cut',cut(6))).not.toContain('kept as');
   });
 });
