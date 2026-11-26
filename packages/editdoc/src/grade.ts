@@ -224,3 +224,45 @@ export function pruneGrade(g: Grade | undefined): Grade | undefined {
 
 /** Linear light of an sRGB value (0–1), for measuring exposure in stops. */
 export const toLinear = lin;
+
+/** A parsed 3D LUT: `size`^3 RGB triples, red fastest (the .cube order). */
+export interface Cube { size: number; data: Float32Array; min: RGB; max: RGB }
+
+/** Parse a .cube 3D LUT (Resolve/Adobe format). Throws on 1D or broken files. */
+export function parseCube(text: string): Cube {
+  let size = 0, min: RGB = [0, 0, 0], max: RGB = [1, 1, 1];
+  const vals: number[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#") || line.startsWith("TITLE")) continue;
+    const parts = line.split(/\s+/);
+    if (parts[0] === "LUT_3D_SIZE") { size = Number(parts[1]); continue; }
+    if (parts[0] === "LUT_1D_SIZE") throw new Error("1D .cube LUTs are not supported");
+    if (parts[0] === "DOMAIN_MIN") { min = parts.slice(1, 4).map(Number) as RGB; continue; }
+    if (parts[0] === "DOMAIN_MAX") { max = parts.slice(1, 4).map(Number) as RGB; continue; }
+    if (/^[A-Z_]+$/.test(parts[0]!)) continue;
+    if (parts.length >= 3) vals.push(Number(parts[0]), Number(parts[1]), Number(parts[2]));
+  }
+  if (!Number.isInteger(size) || size < 2 || size > 256) throw new Error(`Bad LUT_3D_SIZE ${size}`);
+  if (vals.length !== size ** 3 * 3 || vals.some(v => !Number.isFinite(v))) throw new Error(`Expected ${size ** 3} rows, got ${vals.length / 3}`);
+  return { size, data: Float32Array.from(vals), min, max };
+}
+
+/** Look a colour up in a cube, trilinear. */
+export function sampleCube(cube: Cube, c: RGB): RGB {
+  const { size, data, min, max } = cube, s = size - 1;
+  const pos = [0, 1, 2].map(i => clamp((c[i]! - min[i]!) / (max[i]! - min[i]! || 1)) * s);
+  const i0 = pos.map(p => Math.min(Math.floor(p), s - 1)), f = pos.map((p, i) => p - i0[i]!);
+  const at = (r: number, g: number, b: number, ch: number) => data[((b * size + g) * size + r) * 3 + ch]!;
+  const out: RGB = [0, 0, 0];
+  for (let ch = 0; ch < 3; ch++) {
+    let v = 0;
+    for (let k = 0; k < 8; k++) {
+      const dr = k & 1, dg = (k >> 1) & 1, db = (k >> 2) & 1;
+      const w = (dr ? f[0]! : 1 - f[0]!) * (dg ? f[1]! : 1 - f[1]!) * (db ? f[2]! : 1 - f[2]!);
+      if (w) v += w * at(i0[0]! + dr, i0[1]! + dg, i0[2]! + db, ch);
+    }
+    out[ch] = v;
+  }
+  return out;
+}

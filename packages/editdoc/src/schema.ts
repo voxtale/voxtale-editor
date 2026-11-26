@@ -1,15 +1,17 @@
-// EditDoc v5: multi-clip edit on a fixed set of tracks. Plan §1. v3 moved
+// EditDoc v6: multi-clip edit on a fixed set of tracks. Plan §1. v3 moved
 // zoom off a-roll items onto its own track; v4 added transitions, J/L cuts,
 // zoom curves, picture fades, word fixes and variants; v5 added a colour
-// grade per clip and a beat's confidence and lively point, all optional
-// (`upgradeEditDoc` lifts v2, v3 and v4 docs).
+// grade per clip and a beat's confidence and lively point; v6 added sync
+// groups (cameras and mics recorded together), a piece's angle, mic and
+// split / picture-in-picture layout, a clip's sound offset and its colour
+// space (log, HDR, input LUT), all optional (`upgradeEditDoc` lifts v2-v5).
 // Pure zod; no I/O. Times are seconds, frame-snapped by `validateEditDoc`.
 import { z } from "zod";
 import { fpsSchema } from "./time";
 import { cssColor, editStyleSchema, fontWeight } from "./style";
 import { gradeSchema } from "./grade";
 
-export const EDITDOC_VERSION = 5 as const;
+export const EDITDOC_VERSION = 6 as const;
 
 const id = z.string().regex(/^[A-Za-z0-9_.:~-]{1,120}$/); // "~" marks suggestion ids ("a1~r4")
 const time = z.number().finite().nonnegative();
@@ -22,7 +24,8 @@ export type TrackKind = (typeof TRACK_KINDS)[number];
 export const POLICY_KEYS = [...TRACK_KINDS, "markers"] as const;
 export type PolicyKey = (typeof POLICY_KEYS)[number];
 
-export const CLIP_ROLES = ["a-roll", "b-roll", "screen", "music", "sfx", "voiceover", "logo", "other"] as const;
+/** mic: a sound-only file recorded with the cameras (lav, recorder), heard in step with them. */
+export const CLIP_ROLES = ["a-roll", "b-roll", "screen", "music", "sfx", "voiceover", "logo", "other", "mic"] as const;
 
 /** Integrated loudness and true peak of the clip's audio (EBU R128), measured on the creator's machine. */
 export const loudnessSchema = z.object({
@@ -44,6 +47,19 @@ export const beatsSchema = z.object({
 export const BEAT_CONFIDENCE_MIN = 0.4;
 export type ClipBeats = z.infer<typeof beatsSchema>;
 
+export const clipColorSchema = z.object({
+  /** Log profile name (LOG_PROFILES, or "Log" when the brand's is unknown). */
+  log: z.string().trim().min(1).max(80).optional(),
+  /** HDR transfer the camera wrote: HLG or PQ (BT.2020). */
+  hdr: z.enum(["hlg", "pq"]).optional(),
+  /** Tagged full range (Sony 8-bit HD log): code values read as is. */
+  fullRange: z.boolean().optional(),
+  /** camera: written in the file; picture: guessed from the darkest point. */
+  from: z.enum(["camera", "picture"]).optional(),
+  why: z.string().trim().max(200).optional(),
+}).strict();
+export type ClipColor = z.infer<typeof clipColorSchema>;
+
 export const clipRefSchema = z.object({
   id,
   hash,                                   // sha256 of the original bytes
@@ -64,6 +80,22 @@ export const clipRefSchema = z.object({
   beats: beatsSchema.optional(),
   /** Colour grade for every frame of this clip, wherever it shows (video and image clips). */
   grade: gradeSchema.optional(),
+  /**
+   * Seconds the file's sound must be moved later to meet the lips (negative:
+   * earlier). A camera that writes its sound ahead of the picture needs a
+   * positive one. Every piece that plays this clip's sound is shifted.
+   */
+  avOffset: z.number().min(-2).max(2).optional(),
+  /** What ingest read about the picture's colour: a log profile, HDR, full range. */
+  color: clipColorSchema.optional(),
+  /**
+   * The creator's choice of colour space, as Premiere's "Override Media
+   * Color Space": a profile from LOG_PROFILES, "hlg", "pq", or "Rec.709"
+   * (no conversion). Unset: the detected one.
+   */
+  colorSpace: z.string().trim().min(1).max(80).optional(),
+  /** A .cube (path on this machine) applied before the grade instead of the built-in conversion. */
+  inputLut: z.string().trim().min(1).max(1000).optional(),
 }).strict();
 export type ClipRef = z.infer<typeof clipRefSchema>;
 
@@ -121,11 +153,26 @@ const pictureFade = {
   fadeOut: z.number().positive().max(FADE_MAX).optional(),
 };
 
+export const A_ROLL_LAYOUTS = ["camera", "screen", "split", "pip"] as const;
 export const aRollItemSchema = z.object({
   ...itemBase, ...clipRange,
-  layout: z.enum(["camera", "screen", "split"]).optional(),
-  /** Other clips of the same take shown alongside (screen + camera). */
+  /**
+   * camera / screen: one picture. split: the picture and the first companion
+   * side by side (top and bottom on a tall canvas). pip: the picture full
+   * frame, the first companion small in `pipCorner`.
+   */
+  layout: z.enum(A_ROLL_LAYOUTS).optional(),
+  /** Other clips of the same take shown alongside (screen + camera): companion time = this piece's source time + offset. */
   companions: z.array(z.object({ clipId: id, offset: z.number().finite() }).strict()).max(4).optional(),
+  pipCorner: z.enum(PIP_CORNERS).optional(),
+  /**
+   * Picture from this member of the clip's sync group, in step: `in`/`out`
+   * stay in `clipId`'s time (its words, captions and zooms hold), the
+   * render reads the angle at the same moment.
+   */
+  angle: id.optional(),
+  /** Sound from this member of the clip's sync group (a lav, the other camera), in step, as `angle`. */
+  mic: id.optional(),
   gainDb: z.number().min(-60).max(12).default(0),
   transition: transitionSchema.optional(),
   /**
@@ -397,6 +444,23 @@ export const wordFixSchema = z.object({
 }).strict();
 export type WordFix = z.infer<typeof wordFixSchema>;
 
+/**
+ * Sources recorded together (cameras, mics, a screen), on one clock. Each
+ * member's file starts `start` seconds into the group's clock, so member
+ * time = group time - start. `confidence`: how sure the sound match was
+ * (peak over noise; 8 and up is sure); none when set by hand or by length.
+ */
+export const syncGroupSchema = z.object({
+  id,
+  via: z.enum(["sound", "length", "creator"]),
+  members: z.array(z.object({
+    clipId: id,
+    start: z.number().finite().min(-86400).max(86400),
+    confidence: z.number().min(0).max(999).optional(),
+  }).strict()).min(2).max(16),
+}).strict();
+export type SyncGroup = z.infer<typeof syncGroupSchema>;
+
 export const editDocSchema = z.object({
   version: z.literal(EDITDOC_VERSION),
   id,
@@ -408,6 +472,8 @@ export const editDocSchema = z.object({
     height: z.number().int().min(240).max(4320).refine(n => n % 2 === 0, "even height"),
   }).strict(),
   clips: z.array(clipRefSchema).max(2000),
+  /** Clips recorded together; a clip is in one group at most. */
+  groups: z.array(syncGroupSchema).max(100).default([]),
   tracks: tracksSchema,
   markers: z.array(markerSchema).max(500).default([]),
   mix: mixSchema,
@@ -466,13 +532,14 @@ function liftZoom(item: Raw, keys: V2Key[]): Raw | undefined {
  * Bring an older document up to EDITDOC_VERSION before parsing. v2 → v3: each
  * a-roll item's zoom keys become one item on the zoom track. v3 → v4: every
  * new field is optional, so only the number changes. Anything else passes
- * through for the schema to judge. v4 → v5: new fields are optional too.
+ * through for the schema to judge. v4 → v5 and v5 → v6: new fields are
+ * optional (groups default to none).
  */
 export function upgradeEditDoc(input: unknown): unknown {
   const doc = input as Raw | null;
   if (!doc || typeof doc !== "object") return input;
   if (doc.version === 2) return upgradeEditDoc(upgradeV2(doc));
-  if (doc.version === 3 || doc.version === 4) return { ...doc, version: EDITDOC_VERSION };
+  if (doc.version === 3 || doc.version === 4 || doc.version === 5) return { ...doc, version: EDITDOC_VERSION };
   return input;
 }
 

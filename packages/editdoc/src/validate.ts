@@ -2,6 +2,7 @@
 // Errors make a document invalid; warnings go to the review list.
 import { editDocSchema, upgradeEditDoc, OVERLAP_TRANSITIONS, TRACK_KINDS, type ARollItem, type BRollItem, type EditDoc, type EditDocInput, type Item, type TrackKind, type ZoomItem } from "./schema";
 import { fpsValue, toFrame, frameToSeconds } from "./time";
+import { groupIssues, groupOf } from "./sync";
 import { WORD_FIX_REACH, captionReadingSpeed, isClipTrack, soundSpans, transitionJoins } from "./timeline";
 
 export interface DocIssue {
@@ -163,6 +164,22 @@ export function checkEditDoc(doc: EditDoc): DocIssue[] {
   if (aroll.length && toFrame(aroll[0]!.start, fps) > 0) warn("tracks.a-roll", "A-roll starts after 0:00");
   for (let i = 1; i < aroll.length; i++)
     if (toFrame(aroll[i]!.start, fps) > toFrame(aroll[i - 1]!.end, fps)) warn("tracks.a-roll", `Gap before ${aroll[i]!.id}`);
+
+  // Sync groups: members exist, one group per clip; a piece's angle, mic and
+  // companions must share its clip's group, and a mic clip must have sound.
+  for (const g of groupIssues(doc)) err(g.path, g.message);
+  doc.tracks["a-roll"].forEach((item, i) => {
+    const at = `tracks.a-roll.${i}`, g = groupOf(doc.groups, item.clipId);
+    const same = (id: string) => !!g && g.members.some(m => m.clipId === id);
+    for (const key of ["angle", "mic"] as const) {
+      const id = item[key];
+      if (!id || id === item.clipId) continue;
+      if (!clips.has(id)) err(`${at}.${key}`, `Unknown clip ${id}`);
+      else if (!same(id)) err(`${at}.${key}`, `${id} is not in a sync group with ${item.clipId}`);
+    }
+    if (item.mic && clips.get(item.mic) && !clips.get(item.mic)!.hasAudio) warn(`${at}.mic`, `${item.mic} may have no sound`);
+    if ((item.layout === "split" || item.layout === "pip") && !item.companions?.length) warn(`${at}.layout`, `${item.layout} layout needs a companion clip`);
+  });
 
   const markerIds = new Set<string>();
   doc.markers.forEach((m, i) => {
