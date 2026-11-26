@@ -7,6 +7,9 @@ writes {faces: [...]} (largest face per still, or null) on stdout.
 ``subject`` reads {video, out, start, end, fps} and writes a subject mask
 video to ``out`` (voxtale_native/subject.py); ``subject_still`` reads
 {image, out} and writes one still's mask as a PNG.
+``objects`` reads {video, out, start, end, fps, objects, subject} and writes the subject mask with picked objects
+added or cut out (voxtale_native/objects.py); ``objects_still`` reads {image, out, objects, subject, overlay} and
+writes one still's mask, plus an overlay the agent looks at to check its pick.
 """
 
 from __future__ import annotations
@@ -40,7 +43,21 @@ def _subject_still(req: dict) -> dict:
     return subject_mask_still(req["image"], req["out"])
 
 
-OPS = {"faces": _faces, "analyse": _analyse, "subject": _subject, "subject_still": _subject_still}
+def _objects(req: dict) -> dict:
+    from voxtale_native.objects import objects_mask_video
+
+    return objects_mask_video(req["video"], req["out"], float(req["start"]), float(req["end"]), float(req["fps"]),
+                              list(req.get("objects") or []), bool(req.get("subject", True)))
+
+
+def _objects_still(req: dict) -> dict:
+    from voxtale_native.objects import objects_still
+
+    return objects_still(req["image"], req["out"], list(req.get("objects") or []), bool(req.get("subject", False)), req.get("overlay"))
+
+
+OPS = {"faces": _faces, "analyse": _analyse, "subject": _subject, "subject_still": _subject_still,
+       "objects": _objects, "objects_still": _objects_still}
 
 
 def main(argv: list[str]) -> int:
