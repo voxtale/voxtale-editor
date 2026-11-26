@@ -2,6 +2,7 @@
 // State: segments + graphics in memory, mirrored to <workspace>/state.json and
 // <workspace>/edit.json (the EditDoc) after every change.
 import {withMotionKit} from './motion';
+import {resolvePlace,templateHtml,templateSchema} from './templates';
 import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {z} from 'zod/v4';
@@ -311,6 +312,9 @@ function withKeepNotes(ws:Workspace,t:ToolDef<any>):ToolDef<any> {
   }};
 }
 
+/** Template place -> graphic item placement. */
+const ITEM_PLACE={full:'full',left:'left',right:'right',lower:'bottom',top:'top',center:'center'} as const;
+
 export function editorTools(ws:Workspace):ToolDef<any>[] {
   // Graphics render at the canvas size, the speaker's frame; another clip's size gets stretched onto it.
   const canvas=()=>(ws.job.clips.find(speaking)??ws.job.clips[0]!).ref;
@@ -526,6 +530,19 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
       }}),
   ];
   if(ws.graphicsEnabled)tools.push(
+    defineTool({name:'make_graphic',description:'Make a graphic from a designed template (list, stat, beforeAfter, keyTerm, compare, title, flow): you give the words and the spoken word ids each part lands on; code does layout, type, motion and keeps side panels off the face. title is a section title card (full screen by default). place "full" covers the speaker with an opaque full-screen card instead; vary place across the video. Returns stills over the speaker. Same id again revises. Prefer this to render_graphic.',
+      input:{id:z.string().regex(/^[a-z0-9-]{2,40}$/).describe('graphic id, e.g. "list-3-steps"'),template:templateSchema,seconds:z.number().min(2).max(12),
+        anchor:z.object({clip:z.string(),word:z.number().int()}).describe('the word the graphic starts on; beat word ids are in this clip')},
+      run:async({id,template,seconds,anchor})=>{
+        const c=clipOf(ws.job,anchor.clip);
+        const w0=c.words.find(x=>x.id===anchor.word);
+        if(!w0)throw new Error(`no word ${anchor.word} in ${anchor.clip}`);
+        const face=faceAt(c,w0.start);
+        const at=(word:number|undefined,fb:number)=>{const w=word===undefined?undefined:c.words.find(x=>x.id===word);return w?w.start-w0.start:fb;};
+        const ref=canvas();
+        const html=templateHtml(template,{width:ref.width??1920,height:ref.height??1080,seconds,at,...(face?{face}:{})});
+        return renderInto(id,html,seconds,c,w0.start,face,[0.7,seconds*0.55,seconds-0.7],ITEM_PLACE[resolvePlace(template.place,face)]);
+      }}),
     defineTool({name:'render_graphic',description:'Design a graphic: render your own composition (HyperFrames format, one standalone index.html) to a transparent overlay with the graphics renderer (Remotion by default, HyperFrames if picked). Returns the render report (lint output under HyperFrames) and stills composited over the speaker at the anchor word. Re-render with the same id to revise.',
       input:{
         id:z.string().regex(/^[a-z0-9-]{2,40}$/).describe('graphic id, e.g. "stat-40pct"'),
@@ -546,7 +563,7 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
       input:{id:z.string(),clip:z.string(),word:z.number().int(),seconds:z.number().min(0.5).max(15),
         reason:z.string().max(200),fade:fadeField},
       run:async(p)=>{
-        if(!ws.graphics[p.id])throw new Error(`graphic ${p.id} has not rendered; call render_graphic first`);
+        if(!ws.graphics[p.id])throw new Error(`graphic ${p.id} has not rendered; call make_graphic or render_graphic first`);
         if(!ws.segments.length)throw new Error('set a cut first');
         const had=ws.placements.find(x=>x.id===p.id);
         await change(ws,()=>{ws.placements=[...ws.placements.filter(x=>x.id!==p.id),{...p,...(had?.variants?{variants:had.variants}:{}),...(had?.shows?{shows:had.shows}:{})}];},{named:[`g-${p.id}`]});
@@ -646,7 +663,7 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
         let next={...g,variants:[...(g.variants??[])]};
         if(add) {
           if(!add.graphic)throw new Error('a graphic variant needs graphic: the id of another rendered graphic');
-          if(!ws.graphics[add.graphic])throw new Error(`graphic ${add.graphic} has not rendered; call render_graphic first`);
+          if(!ws.graphics[add.graphic])throw new Error(`graphic ${add.graphic} has not rendered; call make_graphic or render_graphic first`);
           if(next.variants.length>=VARIANTS_MAX)throw new Error(`${id} has ${VARIANTS_MAX} variants; choose one or leave it`);
           next.variants.push({id:add.graphic});
         }
