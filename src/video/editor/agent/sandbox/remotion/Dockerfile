@@ -23,4 +23,5 @@ USER render
 RUN if [ -x /usr/bin/chromium ]; then echo /usr/bin/chromium > /app/browser-path; \
   else npx remotion browser ensure && echo '' > /app/browser-path; fi
 COPY --chown=render entry.jsx render.mjs render.sh /app/
+COPY --chown=render scenes /app/scenes
 ENTRYPOINT ["sh", "/app/render.sh"]

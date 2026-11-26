@@ -30,3 +30,19 @@ export async function nativeFaceFinder(jpegs: Uint8Array[]): Promise<(NativeFace
   });
   return faces;
 }
+
+/**
+ * Subject (person) mask video for source seconds [start, end) of `video` at `fps`, written to `out`
+ * (voxtale_native/subject.py, U2-Net-p through cv2.dnn). False when it cannot: no model
+ * (tools/fetch-subject-model.sh), no Python, or a failed read; `warn` gets why.
+ */
+export async function nativeSubjectMask(o: { video: string; start: number; end: number; fps: number; out: string }, warn: (why: string) => void = () => {}): Promise<boolean> {
+  try {
+    await callNative<{ out: string; frames: number }>("subject", o);
+    return true;
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    warn(why.includes("no-model:") ? "subject mask model missing (tools/fetch-subject-model.sh): graphics drawn over the speaker" : `subject mask failed: ${why.slice(0, 200)}`);
+    return false;
+  }
+}

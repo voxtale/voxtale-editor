@@ -34,7 +34,7 @@ Staged CLI workflow: [docs/usage.md](docs/usage.md).
 | `packages/editdoc` | `@voxtale/editdoc`: edit document types, validation, exports (OTIO, FCPXML) |
 | `packages/frames` | `@voxtale/frames`: filmstrips, frames, voice checks from local files |
 | `apps/editor-mcp` | The MCP server entry and bundled fonts |
-| `voxtale_native/` | Python face finder (OpenCV YuNet); `models/` holds the model |
+| `voxtale_native/` | Python face finder (OpenCV YuNet) and subject mask (U2-Net-p, for text behind the speaker); `models/` holds the models |
 | `tests/` | Unit tests (`bun test tests`) |
 | `bench/agenticvbench/` | Bench harness scripts only (no results, no media) |
 | `docs/` | Design notes, research, REDACTED comparisons |
@@ -45,6 +45,7 @@ Staged CLI workflow: [docs/usage.md](docs/usage.md).
 bun run typecheck
 bun test tests                     # no network, no paid calls
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # optional face finder
+tools/fetch-subject-model.sh                                         # optional subject mask (text behind the speaker)
 ```
 
 ## Environment

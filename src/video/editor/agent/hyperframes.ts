@@ -3,7 +3,7 @@
 // renders in its own Chromium instead; the local editor MCP uses
 // localHtmlRenderer (below), no container.
 // Image: docker build -t voxtale-hyperframes-sandbox:1 src/video/editor/agent/sandbox
-import {chmod,cp,mkdir,readdir,readFile,rm,writeFile} from 'node:fs/promises';
+import {chmod,cp,mkdir,readdir,readFile,rm,stat,writeFile} from 'node:fs/promises';
 import {dirname,join} from 'node:path';
 import {spawnText} from '../../../spawn';
 import type {HtmlRenderer} from './frames';
@@ -21,8 +21,12 @@ export async function hyperframesReady(image=HF_IMAGE):Promise<boolean> {
 }
 
 const tail=(s:string,n=1500)=>s.length>n?`…${s.slice(-n)}`:s;
+/** Native scenes (scene.json) are Remotion components; HyperFrames cannot play them. */
+const SCENE_REFUSED={ok:false,report:'render failed: native scenes need the Remotion renderer (VOXTALE_GRAPHICS_RENDERER=remotion); with HyperFrames use render_graphic or make_graphic'} as const;
+const isScene=(dir:string)=>stat(join(dir,'scene.json')).then(()=>true,()=>false);
 
 export const dockerHtmlRenderer=(image=HF_IMAGE):HtmlRenderer=>async({dir})=>{
+  if(await isScene(dir))return SCENE_REFUSED;
   const outDir=join(dirname(dir),'docker-out');
   await rm(outDir,{recursive:true,force:true});
   await mkdir(outDir,{recursive:true});
@@ -93,6 +97,7 @@ async function setUp(home:string):Promise<Kit> {
 export function localHtmlRenderer(o:{home:string;fontsDir?:string}):HtmlRenderer {
   let kit:Promise<Kit>|undefined;
   return async({dir})=>{
+    if(await isScene(dir))return SCENE_REFUSED;
     let k:Kit;
     try {k=await (kit??=setUp(o.home));}
     catch(e) {kit=undefined;return {ok:false,report:`render failed: ${e instanceof Error?e.message:String(e)}`};}

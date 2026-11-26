@@ -4,6 +4,10 @@ The motion kit (`motion.ts`), the v27 graphics skill text (`skill.ts`, GRAPHICS_
 
 Remotion (remotion.dev) renders graphics by default. It is not bundled here: `sandbox/remotion/package.json` installs it. Remotion License: free for individuals and companies of up to 3 people; larger companies need a paid company licence.
 
+## papercraft (MIT)
+
+`sandbox/remotion/scenes/papercraft/` is the papercraft lib (github.com/xikhar/papercraft) as REDACTED vendors it; its LICENSE sits beside it. `scenes/paper.tsx` and the papercraft text in `scene-skill.ts` adapt REDACTED's wrapper and skill.
+
 ## snapcn (MIT)
 
 Rules from the snapcn, motion-quality and remotion-kinetic-typography skills (originals: shadcn-labs/snapcn).

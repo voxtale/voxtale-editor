@@ -223,4 +223,72 @@ describe('frame tools',()=>{
     expect(Object.keys(listed.inputSchema.properties)).not.toContain('placement');
     expect(out.doc.tracks.graphics.map(g=>g.placement)).toEqual(['full']);
   });
+  test('make_graphic fills a template: code writes the html, a side panel keeps its place, a title card covers the frame',async()=>{
+    const jobs:any[]=[];
+    const frames:FrameHost={
+      filmstrip:async()=>new Uint8Array(),joins:async()=>new Uint8Array(),frames:async(_c,times)=>times.map(()=>null),
+      graphic:async(j)=>{jobs.push(j);return {ok:true,report:'ok',webm:`${j.id}.webm`};},
+    };
+    const ref=clipRefSchema.parse({id:'c1',hash:A,name:'a.mov',kind:'video',role:'a-roll',roleSource:'creator',duration:20,width:1920,height:1080,hasAudio:true});
+    let listed:any;
+    const runner:AgentRunner={name:'template',run:async task=>{
+      listed=(await rpc(task,'tools/list')).result.tools.find((t:any)=>t.name==='make_graphic');
+      await rpc(task,'tools/call',{name:'set_cut',arguments:{segments:[{clip:'c1',from:0,to:19}]}});
+      const a=await rpc(task,'tools/call',{name:'make_graphic',arguments:{id:'two-steps',seconds:4,anchor:{clip:'c1',word:8},
+        template:{kind:'list',place:'right',items:[{text:'Plan it',word:8},{text:'Ship it',word:9}]}}},2);
+      expect(a.result.isError).toBeFalsy();
+      const b=await rpc(task,'tools/call',{name:'make_graphic',arguments:{id:'part-two',seconds:3,anchor:{clip:'c1',word:8},
+        template:{kind:'title',kicker:'Part 2',text:'Why it works'}}},3);
+      expect(b.result.isError).toBeFalsy();
+      await rpc(task,'tools/call',{name:'place_graphic',arguments:{id:'two-steps',clip:'c1',word:8,seconds:4,reason:'steps'}},4);
+      await rpc(task,'tools/call',{name:'finish',arguments:{summary:'ok'}},5);
+      await rpc(task,'tools/call',{name:'finish',arguments:{summary:'ok'}},6);
+      return {stop:'success',turns:5,costUsd:null,toolCalls:[],finalText:'done'};
+    }};
+    const workspace=`${process.env.TMPDIR??'/tmp'}/template-test-${Date.now()}`;
+    const out=await planWithAgent({id:'e1',name:'Demo',revision:1,clips:[{ref,transcript:transcript as any}],frames,graphics:true,runner,workspace,eyes:false});
+    expect(JSON.stringify(listed.inputSchema)).toContain('title');
+    expect(jobs.map(j=>j.id)).toEqual(['two-steps','part-two']);
+    expect(jobs[0].html).toContain('Ship it');
+    expect(jobs[1].html).toContain('>works<');
+    expect(out.doc.tracks.graphics.map(g=>g.placement)).toEqual(['right']);
+  });
+  test('scenes: list, write (gated and type-checked), render built-in and own scenes as graphics',async()=>{
+    const jobs:any[]=[];
+    const frames:FrameHost={
+      filmstrip:async()=>new Uint8Array(),joins:async()=>new Uint8Array(),frames:async(_c,times)=>times.map(()=>null),
+      graphic:async(j)=>{jobs.push(j);return {ok:true,report:'ok',webm:`${j.id}.webm`};},
+    };
+    const ref=clipRefSchema.parse({id:'c1',hash:A,name:'a.mov',kind:'video',role:'a-roll',roleSource:'creator',duration:20,width:1920,height:1080,hasAudio:true});
+    const own=`import {AbsoluteFill, interpolate, useCurrentFrame, clamp, z} from './kit';
+import type {SceneBase} from './types';
+export const schema = z.object({label: z.string()});
+export const defaultProps: z.infer<typeof schema> = {label: 'Hi'};
+export default function Scene(p: z.infer<typeof schema> & SceneBase) {
+  return <AbsoluteFill style={{opacity: interpolate(useCurrentFrame(), [0, 9], [0, 1], clamp)}}>{p.label}</AbsoluteFill>;
+}`;
+    const texts:string[]=[];
+    const runner:AgentRunner={name:'scenes',run:async task=>{
+      const call=async(name:string,args:any,id:number)=>{const r=(await rpc(task,'tools/call',{name,arguments:args},id)).result;texts.push(r.content?.[0]?.text??'');return r;};
+      await call('set_cut',{segments:[{clip:'c1',from:0,to:19}]},1);
+      expect((await call('list_scenes',{},2)).isError).toBeFalsy();
+      expect((await call('write_scene',{name:'bad-one',source:own.replace("'./kit';","'./kit';\nimport fs from 'node:fs';")},3)).isError).toBe(true);
+      expect((await call('write_scene',{name:'my-label',source:own},4)).isError).toBeFalsy();
+      expect((await call('render_scene',{id:'hook-1',scene:'Hook',props:{text:'Stop *doing* this'},seconds:3,anchor:{clip:'c1',word:8}},5)).isError).toBeFalsy();
+      expect((await call('render_scene',{id:'bad-props',scene:'Hook',props:{fontSize:9999},seconds:3,anchor:{clip:'c1',word:8}},6)).isError).toBe(true);
+      expect((await call('render_scene',{id:'mine',scene:'my-label',props:{label:'Yo'},seconds:2,anchor:{clip:'c1',word:8}},7)).isError).toBeFalsy();
+      await call('place_graphic',{id:'mine',clip:'c1',word:8,seconds:2,reason:'test'},8);
+      await call('finish',{summary:'ok'},9);await call('finish',{summary:'ok'},10);
+      return {stop:'success',turns:5,costUsd:null,toolCalls:[],finalText:'done'};
+    }};
+    const workspace=`${process.env.TMPDIR??'/tmp'}/scene-test-${Date.now()}`;
+    const out=await planWithAgent({id:'e1',name:'Demo',revision:1,clips:[{ref,transcript:transcript as any}],frames,graphics:true,runner,workspace,eyes:false});
+    expect(texts[1]).toContain('Hook');
+    expect(texts[2]).toContain('node:fs');
+    expect(jobs.map(j=>j.id)).toEqual(['hook-1','mine']);
+    expect(jobs[0].scene).toEqual({name:'Hook',props:{text:'Stop *doing* this'}});
+    expect(jobs[1].scene.name).toBe('custom');
+    expect(jobs[1].scene.source).toContain('p.label');
+    expect(out.doc.tracks.graphics.map(g=>g.placement)).toEqual(['full']);
+  },30_000);
 });

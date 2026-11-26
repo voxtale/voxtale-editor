@@ -4,6 +4,8 @@
 writes {faces: [...]} (largest face per still, or null) on stdout.
 ``python -m voxtale_native analyse`` measures a reference video's editing style
 (see analyse.py).
+``subject`` reads {video, out, start, end, fps} and writes a subject mask
+video to ``out`` (voxtale_native/subject.py).
 """
 
 from __future__ import annotations
@@ -25,7 +27,13 @@ def _analyse(req: dict) -> dict:
     return handle(req)
 
 
-OPS = {"faces": _faces, "analyse": _analyse}
+def _subject(req: dict) -> dict:
+    from voxtale_native.subject import subject_mask_video
+
+    return subject_mask_video(req["video"], req["out"], float(req["start"]), float(req["end"]), float(req["fps"]))
+
+
+OPS = {"faces": _faces, "analyse": _analyse, "subject": _subject}
 
 
 def main(argv: list[str]) -> int:

@@ -162,7 +162,7 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
         }});
         const x=r.actual,canvas=ws.doc!.canvas;
         const shaped=(width||height)&&(x.width!==canvas.width||x.height!==canvas.height)?` (cut composed at ${canvas.width}x${canvas.height}, ${fit==='cover'?'cropped to fill':'scaled whole with black bars'})`:'';
-        return {text:`${r.file} (${r.seconds.toFixed(0)}s to render)\nfile: ${x.width}x${x.height}, ${+x.fps.toFixed(3)} fps, ${x.duration.toFixed(2)}s${shaped}${r.skipped.length?`\nleft out: ${r.skipped.join(', ')}`:''}${r.loudness.length?`\nloudness:\n- ${r.loudness.join('\n- ')}`:''}${r.graded.length?`\ngraded: ${r.graded.join(', ')}`:''}`};
+        return {text:`${r.file} (${r.seconds.toFixed(0)}s to render)\nfile: ${x.width}x${x.height}, ${+x.fps.toFixed(3)} fps, ${x.duration.toFixed(2)}s${shaped}${r.skipped.length?`\nleft out: ${r.skipped.join(', ')}`:''}${r.unmasked.length?`\nover the speaker, not behind: ${r.unmasked.join('; ')}`:''}${r.loudness.length?`\nloudness:\n- ${r.loudness.join('\n- ')}`:''}${r.graded.length?`\ngraded: ${r.graded.join(', ')}`:''}`};
       }},
 
     {name:'sheet',description:'16 frames of a rendered video in one picture, to check what the viewer sees: black frames, captions over faces, footage that misses the words.',

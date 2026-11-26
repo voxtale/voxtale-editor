@@ -18,6 +18,7 @@ import type {FaceFinder,VisionModel} from '../../footage-index';
 import type {Edit} from '../../model';
 import {denseMoments,freshMoments,type ClipMoments} from '../../moments';
 import {loudnessReport,renderEditDoc,type OutputShape} from '../../render-edit';
+import {nativeSubjectMask} from '../../../native/bridge';
 import {transcribe} from '../../transcript';
 import type {Point} from '../../zoom';
 import type {Job,JobClip} from '../agent/cut';
@@ -377,6 +378,8 @@ export const finalDoc=(p:Project,doc:EditDoc)=>p.voiceover?coverVoice(doc):doc;
 
 /** Render the cut to an MP4 (relative paths sit in the footage folder). Returns the file and what was left out. */
 export async function renderProject(a:At,p:Project,ws:Workspace,o:{out?:string;fontsDir?:string;progress?:(f:number)=>void;output?:OutputShape}):Promise<{file:string;seconds:number;skipped:string[];
+  /** Graphics meant behind the speaker, drawn over instead (no subject mask), and why. */
+  unmasked:string[];
   /** What the file is, read back from it: size, frame rate, length. */
   actual:{width:number;height:number;fps:number;duration:number};
   /** Integrated loudness and true peak, as built and as delivered. */
@@ -389,11 +392,13 @@ export async function renderProject(a:At,p:Project,ws:Workspace,o:{out?:string;f
   await mkdir(dirname(file),{recursive:true});
   const t0=Date.now();
   const graphics=Object.fromEntries(Object.entries(ws.graphics).filter(([,g])=>existsSync(g.webm)).map(([id,g])=>[id,g.webm]));
-  const r=await renderEditDoc({doc:finalDoc(p,ws.doc),media:p.sources,graphics,out:file,work:join(a.dir,'render'),
+  const why=new Set<string>();
+  const r=await renderEditDoc({doc:finalDoc(p,ws.doc),media:p.sources,graphics,out:file,work:join(a.dir,'render'),subjectMask:m=>nativeSubjectMask(m,w=>why.add(w)),
     ...(o.fontsDir&&existsSync(o.fontsDir)?{fontsDir:o.fontsDir}:{}),...(o.progress?{progress:o.progress}:{}),...(o.output?{output:o.output}:{})});
   const seconds=(Date.now()-t0)/1000,i=await probe(file),[n,d]=i.rate.split('/').map(Number);
   const doc=ws.doc;
-  return {file,seconds,skipped:r.skipped.map(x=>x.itemId),actual:{width:i.width??0,height:i.height??0,fps:n&&d?n/d:0,duration:i.duration},
+  const unmasked=r.skipped.filter(x=>x.reason==='subject-mask-missing').map(x=>x.itemId);
+  return {file,seconds,skipped:r.skipped.filter(x=>x.reason==='graphic-not-ready').map(x=>x.itemId),unmasked:unmasked.length?[...unmasked,...why]:[],actual:{width:i.width??0,height:i.height??0,fps:n&&d?n/d:0,duration:i.duration},
     loudness:r.loudness?loudnessReport(r.loudness,{lufs:doc.mix.loudnessLufs,truePeakDb:doc.mix.truePeakDb}):[],graded:r.graded??[]};
 }
 

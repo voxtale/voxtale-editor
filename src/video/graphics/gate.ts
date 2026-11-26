@@ -6,7 +6,8 @@ const BANNED_IDENTIFIERS = new Set(['eval', 'Function', 'fetch', 'XMLHttpRequest
 const BANNED_PROPERTIES = new Set(['constructor', '__proto__', 'prototype', 'defineProperty', 'getPrototypeOf', 'setPrototypeOf', '__defineGetter__', '__lookupGetter__']);
 const BANNED_TAGS = new Set(['img', 'video', 'audio', 'iframe', 'script', 'link', 'object', 'embed', 'style', 'image', 'foreignObject', 'use']);
 export interface GateResult { ok: boolean; errors: string[] }
-export function gate(source: string): GateResult {
+/** `imports`: the module specifiers allowed (default react, remotion, ./kit). */
+export function gate(source: string, {imports = ALLOWED_IMPORTS}: {imports?: ReadonlySet<string>} = {}): GateResult {
   const errors: string[] = [];
   const file = ts.createSourceFile('graphic.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const at = (n: ts.Node) => `line ${file.getLineAndCharacterOfPosition(n.getStart()).line + 1}`;
@@ -14,7 +15,7 @@ export function gate(source: string): GateResult {
   const visit = (n: ts.Node): void => {
     if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) {
       const spec = n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier) ? n.moduleSpecifier.text : null;
-      if (spec !== null && !ALLOWED_IMPORTS.has(spec)) errors.push(`${at(n)}: import from "${spec}" not allowed`);
+      if (spec !== null && !imports.has(spec)) errors.push(`${at(n)}: import from "${spec}" not allowed`);
     }
     if (ts.isImportDeclaration(n) && n.importClause?.namedBindings && ts.isNamedImports(n.importClause.namedBindings))
       for (const el of n.importClause.namedBindings.elements) if (BANNED_IDENTIFIERS.has((el.propertyName ?? el.name).text)) errors.push(`${at(el)}: "${(el.propertyName ?? el.name).text}" not allowed`);

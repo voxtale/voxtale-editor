@@ -52,6 +52,11 @@ export interface GraphicJob {
    * Local hosts only: a relay host has no access to them and leaves them out.
    */
   files?:{name:string;path:string}[];
+  /**
+   * A native Remotion scene instead of the composition: a built-in by name, or
+   * `custom` with the agent's TSX in `source`. Needs the Remotion renderer.
+   */
+  scene?:{name:string;props:Record<string,unknown>;source?:string};
 }
 
 export interface GraphicResult {
@@ -211,6 +216,10 @@ export async function renderGraphic(dir:string,job:GraphicJob,backdrop:string,re
   if(job.files?.length) {
     await mkdir(join(inDir,'brand'),{recursive:true});
     for(const f of job.files)await copyFile(f.path,join(inDir,'brand',basename(f.name))).catch(()=>{});
+  }
+  if(job.scene) {
+    await writeFile(join(inDir,'scene.json'),JSON.stringify({scene:job.scene.name,props:job.scene.props}));
+    if(job.scene.source!==undefined)await writeFile(join(inDir,'scene.tsx'),job.scene.source);
   }
   let r:Awaited<ReturnType<HtmlRenderer>>;
   try {r=await render({dir:inDir,width:job.width,height:job.height,seconds:job.seconds});}

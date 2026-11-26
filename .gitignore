@@ -16,3 +16,6 @@ bench/**/*.log
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Subject mask model: tools/fetch-subject-model.sh
+models/u2netp.onnx

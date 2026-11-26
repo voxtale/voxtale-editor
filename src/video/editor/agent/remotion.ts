@@ -66,12 +66,14 @@ async function run(cmd:string[],o:{cwd?:string;timeoutMs?:number}={}):Promise<{c
   } finally {clearTimeout(timer);}
 }
 
-/** Remotion installed once into `home` from sandbox/remotion/package.json, with entry.jsx and render.mjs. Needs Node on PATH. */
+/** Remotion installed once into `home` from sandbox/remotion/package.json, with entry.jsx, render.mjs and scenes/. Needs Node on PATH. */
 async function setUp(home:string):Promise<string> {
   await mkdir(home,{recursive:true});
   const want=await readFile(join(SANDBOX,'package.json'),'utf8');
   const have=await readFile(join(home,'package.json'),'utf8').catch(()=>'');
   for(const f of ['entry.jsx','render.mjs'])await cp(join(SANDBOX,f),join(home,f));
+  await rm(join(home,'scenes'),{recursive:true,force:true});
+  await cp(join(SANDBOX,'scenes'),join(home,'scenes'),{recursive:true});
   if(have!==want||!await readFile(join(home,'node_modules/@remotion/renderer/package.json'),'utf8').then(()=>true,()=>false)) {
     await writeFile(join(home,'package.json'),want);
     const r=await run([process.execPath,'install','--no-save'],{cwd:home});

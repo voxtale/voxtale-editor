@@ -4,7 +4,8 @@
 // grade per clip and a beat's confidence and lively point; v6 added sync
 // groups (cameras and mics recorded together), a piece's angle, mic and
 // split / picture-in-picture layout, a clip's sound offset and its colour
-// space (log, HDR, input LUT), all optional (`upgradeEditDoc` lifts v2-v5).
+// space (log, HDR, input LUT), and a graphic's behindSubject (text behind
+// the speaker), all optional (`upgradeEditDoc` lifts v2-v5).
 // Pure zod; no I/O. Times are seconds, frame-snapped by `validateEditDoc`.
 import { z } from "zod";
 import { fpsSchema } from "./time";
@@ -254,6 +255,8 @@ export const graphicItemSchema = z.object({
     assetRevision: z.number().int().nonnegative().default(0),
     placement: z.enum(GRAPHIC_PLACEMENTS).optional(),
   }).strict()).max(VARIANTS_MAX).optional(),
+  /** Drawn behind the speaker: the a-roll's subject (a person mask) goes back on top. Without a mask, drawn over as usual. */
+  behindSubject: z.boolean().optional(),
   ...pictureFade,
 }).strict();
 export const musicItemSchema = z.object({
@@ -533,7 +536,7 @@ function liftZoom(item: Raw, keys: V2Key[]): Raw | undefined {
  * a-roll item's zoom keys become one item on the zoom track. v3 → v4: every
  * new field is optional, so only the number changes. Anything else passes
  * through for the schema to judge. v4 → v5 and v5 → v6: new fields are
- * optional (groups default to none).
+ * optional (groups, angles, avOffset, graphics behindSubject).
  */
 export function upgradeEditDoc(input: unknown): unknown {
   const doc = input as Raw | null;
