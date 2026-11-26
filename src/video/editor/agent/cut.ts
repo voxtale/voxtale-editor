@@ -25,7 +25,9 @@ export interface Job {id:string;name:string;clips:JobClip[];style:EditStyle;targ
   /** The creator's standing rules, accepted on earlier edits (../rules.ts). */
   rules?:string[];
   /** Clips recorded together, by clip id: `clip` time = `with` time + offset. */
-  sync?:ClipSync[]}
+  sync?:ClipSync[];
+  /** The creator's timed notes on the last version, moved onto its speech (./notes.ts). */
+  notes?:import('./notes').PlacedNote[]}
 /**
  * `pace`: how tight this stretch runs (the pause limit inside it and the breath at its edges).
  * `hold`: seconds of the pause after its last word to keep, a beat for a line to land.

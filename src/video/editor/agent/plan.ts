@@ -15,6 +15,7 @@ import {promptText} from '../../../services/prompts';
 import {type ClipMoments} from '../../moments';
 import {beatsOfFile,findBeats} from '../../beats';
 import {checkCut,type Job,type JobClip} from './cut';
+import {creatorNotes,notesBrief,placeNotes,type CreatorNote,type NoteReply} from './notes';
 import {eyeFinder,type EyeFinder} from './eyes';
 import {AUDIO_MAX_SECONDS,AUDIO_RATE,localFrames,type FrameHost,type HtmlRenderer} from './frames';
 import {dockerGraphicsRenderer} from './remotion';
@@ -50,6 +51,8 @@ export interface AgentPlanInput {
   project?:ProjectBrief;
   /** The creator's accepted standing rules (../rules.ts acceptedRules), text only. */
   rules?:string[];
+  /** Timed notes on `previous` (output seconds of it); default: its creator note markers. */
+  notes?:CreatorNote[];
   /** HyperFrames graphics (the frame host renders them). */
   graphics:boolean;
   runner:AgentRunner;
@@ -83,6 +86,8 @@ export interface AgentPlan {
   run:AgentRun;
   problems:string[];
   metrics:Record<string,number|string>;
+  /** The agent's answer to each creator note, one line each, by note id. */
+  noteReplies?:NoteReply[];
   /** Standing rules the agent proposed from the creator's words: the host stores them as proposed, for the creator to accept, edit or refuse. */
   proposedRules?:{text:string;said:string}[];
 }
@@ -119,6 +124,7 @@ export function taskPrompt(job:Job,graphics:boolean,kept=false):string {
     asksToLast(job.instruction)?`The instruction asks for something to last past this edit: after doing it here, call propose_rule once with the rule in one plain sentence.`:'',
     ...(job.project?projectLines(job.project):[]),
     job.instruction?`Creator's instruction: ${job.instruction}`:'',
+    notesBrief(job.notes??[]),
     `Call finish when done.`,
   ].filter(Boolean).join('\n');
 }
@@ -133,6 +139,9 @@ export async function planWithAgent(o:AgentPlanInput):Promise<AgentPlan> {
   if(!clips.some(c=>c.ref.role==='a-roll'&&c.words.length))throw new Error('The agent editor needs at least one a-roll clip with speech.');
   const job=newJob({id:o.id,name:o.name,clips,style:o.look?.style??styleFor(o.style,o.brand),
     ...(o.targetDuration?{targetSeconds:o.targetDuration}:{}),...(o.instruction?{instruction:o.instruction}:{}),...(o.project?{project:o.project}:{}),...(o.rules?.length?{rules:o.rules}:{})});
+  const timed=o.notes??creatorNotes(o.previous);
+  // A note's time is rough: move it onto the speech of the version it was left on.
+  if(timed.length)job.notes=o.previous?placeNotes(o.previous,id=>clips.find(c=>c.ref.id===id)?.words??[],timed):timed.map(n=>({...n,t:n.at,said:'',far:true}));
   await mkdir(o.workspace,{recursive:true});
   // Music: find its beat, so cuts and picture changes can land on it.
   for(const c of clips) {
@@ -178,6 +187,7 @@ export async function planWithAgent(o:AgentPlanInput):Promise<AgentPlan> {
   // Variants ship too, so the creator can switch to them later.
   const placed=new Set(doc.tracks.graphics.flatMap(g=>[g.assetId,...(g.variants??[]).map(v=>v.assetId)]));
   return {doc,notes,problems:check.problems,metrics:check.metrics,run,...(ws.proposedRules?.length?{proposedRules:ws.proposedRules}:{}),
+    ...(ws.finished?.noteReplies?.length?{noteReplies:ws.finished.noteReplies}:{}),
     graphics:Object.entries(ws.graphics).filter(([id])=>placed.has(id)).map(([assetId,g])=>({assetId,webm:g.webm,seconds:g.seconds}))};
 }
 
