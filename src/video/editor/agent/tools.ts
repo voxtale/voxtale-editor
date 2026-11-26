@@ -65,6 +65,8 @@ export interface Workspace {
   frames:FrameHost;
   /** Finds the speaker's eyes at cut frames; results cached by clip and time. */
   eyes?:EyeFinder;
+  /** Masks the speaker in a preview still, so watch_cut shows text behind them as the export does. */
+  cutout?:(still:string,out:string)=>Promise<boolean>;
   eyeCache?:Map<string,Point|null>;
   /** Saves so far, and the save the agent last watched the cut at. */
   edits?:number;
@@ -238,7 +240,7 @@ async function watchChanged(ws:Workspace,doc:EditDoc):Promise<ToolResult> {
   const tall=doc.canvas.height>doc.canvas.width,width=tall?360:640;
   const size={width,height:Math.round(width*doc.canvas.height/doc.canvas.width/2)*2};
   const dir=join(ws.dir,'preview',`changed-${ws.edits??0}`);
-  const bare=await drawPreview({shots,canvas:doc.canvas,frames:ws.frames,dir,ff,width});
+  const bare=await drawPreview({shots,canvas:doc.canvas,frames:ws.frames,dir,ff,width,...(ws.cutout?{cutout:ws.cutout}:{})});
   // Text is drawn with libass; an ffmpeg without it still shows the frames, unchecked.
   const drawn=await textSheet({ff,doc,times:moments.map(m=>m.t),dir,size}).catch((e:Error)=>e);
   const sheet=drawn instanceof Error?bare:drawn.sheet,rows=drawn instanceof Error?[]:drawn.rows;
@@ -534,7 +536,7 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
         if(to<=start)throw new Error(`the cut runs 0-${total.toFixed(1)}s`);
         const hashOf=(id:string)=>{const c=ws.job.clips.find(x=>x.ref.id===id);return c&&c.ref.kind!=='audio'?c.ref.hash:undefined;};
         const shots=previewShots(doc,previewTimes(start,to,frames),hashOf,id=>ws.graphics[id]?.webm);
-        const img=await drawPreview({shots,canvas:doc.canvas,frames:ws.frames,dir:join(ws.dir,'preview',String(ws.edits??0)),ff});
+        const img=await drawPreview({shots,canvas:doc.canvas,frames:ws.frames,dir:join(ws.dir,'preview',String(ws.edits??0)),ff,...(ws.cutout?{cutout:ws.cutout}:{})});
         if(start<=0.01&&to>=total-0.01)ws.watchedAt=ws.edits;
         ws.seenDoc=doc;
         const heard=(t:number)=>{

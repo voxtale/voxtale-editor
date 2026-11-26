@@ -46,3 +46,15 @@ export async function nativeSubjectMask(o: { video: string; start: number; end: 
     return false;
   }
 }
+
+/** One still's subject mask (greyscale PNG, white = subject) for preview frames; false when it cannot, as nativeSubjectMask. */
+export async function nativeSubjectStill(image: string, out: string, warn: (why: string) => void = () => {}): Promise<boolean> {
+  try {
+    await callNative<{ out: string }>("subject_still", { image, out });
+    return true;
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    warn(why.includes("no-model:") ? "subject mask model missing (tools/fetch-subject-model.sh): stills show graphics over the speaker" : `subject mask failed: ${why.slice(0, 200)}`);
+    return false;
+  }
+}

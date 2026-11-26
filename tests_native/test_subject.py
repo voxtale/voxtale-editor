@@ -39,3 +39,22 @@ def test_missing_model_is_a_no_model_error(tmp_path):
     req = json.dumps({"video": "x.mp4", "out": str(tmp_path / "m.avi"), "start": 0, "end": 1, "fps": 24})
     p = subprocess.run([sys.executable, "-m", "voxtale_native", "subject"], input=req, capture_output=True, text=True, env=env)
     assert p.returncode == 1 and json.loads(p.stdout)["error"].startswith("NoModel: no-model:")
+
+
+@needs_model
+def test_mask_still_marks_the_subject(tmp_path):
+    src, out = str(tmp_path / "in.jpg"), str(tmp_path / "mask.png")
+    img = numpy.full((180, 320, 3), 90, numpy.uint8)
+    cv2.circle(img, (160, 100), 55, (40, 120, 230), -1)
+    cv2.imwrite(src, img)
+    r = subject.subject_mask_still(src, out)
+    assert (r["width"], r["height"]) == (320, 180)
+    m = cv2.imread(out, cv2.IMREAD_GRAYSCALE)
+    assert m[100, 160] > 128 > m[10, 10]
+
+
+def test_still_without_model_is_a_no_model_error(tmp_path):
+    env = {**os.environ, "VOXTALE_SUBJECT_MODEL": str(tmp_path / "none.onnx")}
+    req = json.dumps({"image": "x.jpg", "out": str(tmp_path / "m.png")})
+    p = subprocess.run([sys.executable, "-m", "voxtale_native", "subject_still"], input=req, capture_output=True, text=True, env=env)
+    assert p.returncode != 0 and "no-model:" in (p.stdout + p.stderr)

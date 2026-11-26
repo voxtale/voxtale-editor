@@ -28,8 +28,8 @@ export interface PreviewShot {
   /** Output second. */
   t:number;
   layers:PreviewLayer[];
-  /** Rendered overlays up at `t`, with the second into each. */
-  graphics:{webm:string;t:number}[];
+  /** Rendered overlays up at `t`, with the second into each; behind: the speaker is drawn back over it. */
+  graphics:{webm:string;t:number;behind?:boolean}[];
   /** What is on screen and in the mix, in words. */
   notes:string[];
 }
@@ -76,8 +76,8 @@ export function previewShots(doc:EditDoc,times:number[],hashOf:(clipId:string)=>
     }
     for(const g of on(doc.tracks.graphics,t)) {
       const webm=webmOf(g.assetId);
-      if(webm)graphics.push({webm,t:t-g.start});
-      notes.push(`graphic ${g.assetId} (${g.placement}${webm?'':', not drawn'})`);
+      if(webm)graphics.push({webm,t:t-g.start,...(g.behindSubject&&speaker?{behind:true}:{})});
+      notes.push(`graphic ${g.assetId} (${g.placement}${g.behindSubject?', behind the speaker':''}${webm?'':', not drawn'})`);
     }
     for(const x of on(doc.tracks.text,t))notes.push(`text ${x.template} "${x.text}" (not drawn)`);
     const cap=on(doc.tracks.captions,t)[0];
@@ -89,8 +89,14 @@ export function previewShots(doc:EditDoc,times:number[],hashOf:(clipId:string)=>
 
 const even=(x:number)=>Math.max(2,Math.round(x/2)*2);
 
-/** The shots as one sheet (JPEG), left to right, top to bottom. */
-export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;height:number};frames:FrameHost;dir:string;ff:(args:string[])=>Promise<void>;width?:number}):Promise<Uint8Array> {
+/**
+ * The shots as one sheet (JPEG), left to right, top to bottom. `cutout` masks
+ * the speaker in a still (greyscale PNG, white = subject); with it, a shot
+ * with a behind-subject graphic draws the speaker back over it, as the export
+ * does. Without it, or when it fails, the graphic stays on top.
+ */
+export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;height:number};frames:FrameHost;dir:string;ff:(args:string[])=>Promise<void>;width?:number;
+  cutout?:(still:string,out:string)=>Promise<boolean>}):Promise<Uint8Array> {
   const {shots,canvas,ff}=o;
   if(!shots.length)throw new Error('nothing to preview');
   await mkdir(o.dir,{recursive:true});
@@ -111,14 +117,17 @@ export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;he
       still.set(`${clip}@${t}`,file);
     }));
   }));
+  const masks=new Map<string,string|null>();
+  const maskOf=async(file:string):Promise<string|null>=>{
+    if(!masks.has(file)){const m=file.replace(/\.jpg$/,'-mask.png');masks.set(file,o.cutout&&await o.cutout(file,m).catch(()=>false)?m:null);}
+    return masks.get(file)!;
+  };
   for(const [i,s] of shots.entries()) {
     const inputs=['-f','lavfi','-i',`color=black:s=${cw}x${ch}`];
     const graph:string[]=[];
     let last='0:v',idx=1;
-    for(const l of s.layers) {
-      const file=still.get(`${l.clip}@${l.t}`);
-      if(!file)continue;
-      inputs.push('-i',file);
+    // How each layer lands on the canvas: filters for its still, and where.
+    const place=(l:PreviewLayer)=>{
       const bw=even((l.box?.width??canvas.width)*k),bh=even((l.box?.height??canvas.height)*k);
       const crop=l.crop?`crop=iw*${l.crop.w}:ih*${l.crop.h}:iw*${l.crop.x}:ih*${l.crop.y},`:'';
       const fit=l.fit==='cover'
@@ -128,7 +137,14 @@ export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;he
       const zoom=z?`,scale=${even(bw*z.scale)}:${even(bh*z.scale)}`:'';
       const x=z?Math.round(((1-z.scale)/2+z.dx)*cw):Math.round((l.box?.x??0)*k);
       const y=z?Math.round(((1-z.scale)/2+z.dy)*ch):Math.round((l.box?.y??0)*k);
-      graph.push(`[${idx}:v]${crop}${fit}${zoom}[l${idx}]`,`[${last}][l${idx}]overlay=${x}:${y}[o${idx}]`);
+      return {vf:`${crop}${fit}${zoom}`,x,y};
+    };
+    for(const l of s.layers) {
+      const file=still.get(`${l.clip}@${l.t}`);
+      if(!file)continue;
+      inputs.push('-i',file);
+      const p=place(l);
+      graph.push(`[${idx}:v]${p.vf}[l${idx}]`,`[${last}][l${idx}]overlay=${p.x}:${p.y}[o${idx}]`);
       last=`o${idx}`;
       idx++;
     }
@@ -138,6 +154,19 @@ export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;he
       graph.push(`[${idx}:v]scale=${cw}:${ch}[l${idx}]`,`[${last}][l${idx}]overlay=0:0[o${idx}]`);
       last=`o${idx}`;
       idx++;
+    }
+    // Text behind the speaker: the full-frame speaker layer, cut out, back on top.
+    const speaker=s.graphics.some(g=>g.behind)?s.layers.find(l=>!l.box):undefined;
+    const sf=speaker&&still.get(`${speaker.clip}@${speaker.t}`);
+    const mask=sf?await maskOf(sf):null;
+    if(speaker&&sf&&mask) {
+      const p=place(speaker);
+      inputs.push('-i',sf,'-i',mask);
+      graph.push(`[${idx+1}:v]format=gray,scale=${FETCH_WIDTH}:-2[m${idx}]`,`[${idx}:v]scale=${FETCH_WIDTH}:-2[s${idx}]`,
+        `[s${idx}][m${idx}]alphamerge,format=rgba,${p.vf}[l${idx}]`,`[${last}][l${idx}]overlay=${p.x}:${p.y}[o${idx}]`);
+      last=`o${idx}`;
+      idx+=2;
+      s.notes.push('speaker cut out over the graphic');
     }
     const out=join(o.dir,`shot-${i}.jpg`);
     if(graph.length)await ff([...inputs,'-filter_complex',graph.join(';'),'-map',`[${last}]`,'-frames:v','1',out]);

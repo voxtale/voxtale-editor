@@ -63,9 +63,9 @@ export function understandClips(job:Job):UnderstandClip[] {
 }
 
 /** An empty workspace on a job: nothing cut yet. */
-export function newWorkspace(o:{dir:string;job:Job;frames:FrameHost;graphics:boolean;eyes?:EyeFinder;captionLookKept?:boolean}):Workspace {
+export function newWorkspace(o:{dir:string;job:Job;frames:FrameHost;graphics:boolean;eyes?:EyeFinder;captionLookKept?:boolean;cutout?:Workspace['cutout']}):Workspace {
   return {dir:o.dir,job:o.job,segments:[],placements:[],captions:[],zooms:[],broll:[],text:[],chapters:[],graphics:{},graphicsEnabled:o.graphics,frames:o.frames,
-    ...(o.captionLookKept?{captionLookKept:true}:{}),...(o.eyes?{eyes:o.eyes}:{})};
+    ...(o.captionLookKept?{captionLookKept:true}:{}),...(o.eyes?{eyes:o.eyes}:{}),...(o.cutout?{cutout:o.cutout}:{})};
 }
 
 /**

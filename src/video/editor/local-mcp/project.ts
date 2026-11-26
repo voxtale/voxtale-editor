@@ -18,7 +18,7 @@ import type {FaceFinder,VisionModel} from '../../footage-index';
 import type {Edit} from '../../model';
 import {denseMoments,freshMoments,type ClipMoments} from '../../moments';
 import {loudnessReport,renderEditDoc,type OutputShape} from '../../render-edit';
-import {nativeSubjectMask} from '../../../native/bridge';
+import {nativeSubjectMask,nativeSubjectStill} from '../../../native/bridge';
 import {transcribe} from '../../transcript';
 import type {Point} from '../../zoom';
 import type {Job,JobClip} from '../agent/cut';
@@ -323,7 +323,7 @@ export async function loadProject(a:At,ports:Ports={}):Promise<{p:Project;ws:Wor
   const p:Project=JSON.parse(await readFile(projectFile(a),'utf8'));
   // Previews and samples read the light copies; the render reads the originals (renderProject: p.sources).
   const frames=cachedVoice(a,localFrames({sources:{...p.sources,...p.proxies},dir:join(a.dir,'looks'),ff,...(ports.html?{html:ports.html}:{})}));
-  const ws=newWorkspace({dir:a.dir,job:p.job,frames,graphics:!!ports.html,...(ports.faces?{eyes:eyeFinder(frames.frames,ports.faces)}:{})});
+  const ws=newWorkspace({dir:a.dir,job:p.job,frames,graphics:!!ports.html,cutout:(still,out)=>nativeSubjectStill(still,out),...(ports.faces?{eyes:eyeFinder(frames.frames,ports.faces)}:{})});
   // state.json is what save() writes; null fields (music cleared) mean "none".
   const state=await readJson<Record<string,unknown>>(join(a.dir,'state.json'),{});
   for(const [k,v] of Object.entries(state))if(v!==null&&v!==undefined)(ws as unknown as Record<string,unknown>)[k]=v;
