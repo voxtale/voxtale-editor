@@ -123,17 +123,17 @@ describe('EditDoc v6: media and graphics fields together',()=>{
     return {...d,clips:d.clips.map(c=>c.id==='close'?{...c,avOffset:0.08}:c),
       tracks:{...d.tracks,graphics:[{id:'g1',assetId:'ga-1',start:0,end:2,owner:'agent',behindSubject:true}]}};
   };
-  it('one v6 holds groups, angle, mic, avOffset and behindSubject',()=>{
+  it('one doc holds groups, angle, mic, avOffset and behindSubject',()=>{
     const p=parseEditDoc(full()).doc;
-    expect(p.version).toBe(6);
+    expect(p.version).toBe(EDITDOC_VERSION);
     expect([p.groups.length,p.tracks['a-roll'][0]!.angle,p.clips.find(c=>c.id==='close')!.avOffset,p.tracks.graphics[0]!.behindSubject]).toEqual([1,'close',0.08,true]);
   });
   it('v3, v4 and v5 docs still load, with none of the new fields',()=>{
     const d=doc({});
     const {groups:_,...old}=d;
-    for(const version of [3,4,5]) {
+    for(const version of [3,4,5,6]) {
       const p=parseEditDoc({...old,version}).doc;
-      expect([p.version,p.groups,p.tracks.graphics]).toEqual([6,[],[]]);
+      expect([p.version,p.groups,p.tracks.graphics,p.logos]).toEqual([EDITDOC_VERSION,[],[],[]]);
     }
   });
   it('a subject mask follows the angle shown, in step',()=>{

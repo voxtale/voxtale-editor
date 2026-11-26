@@ -51,3 +51,42 @@ describe('DJI D-Log M (bq4)',()=>{
     expect(makerLut(undefined,d)).toBeUndefined();
   });
 });
+
+describe('brand logo on the cut (jo6.1)',async()=>{
+  const {checkEditDoc,clipRefSchema}=await import('@voxtale/editdoc');
+  const {buildCut,styleOf}=await import('../src/video/editor/agent/cut');
+  const {logoClip,placeLogos}=await import('../src/video/editor/agent/logo');
+  const {planRender}=await import('../src/video/render-edit');
+  const speaker=clipRefSchema.parse({id:'c1',hash:'a'.repeat(64),name:'c.mov',kind:'video',role:'a-roll',roleSource:'index',duration:60,width:1920,height:1080,hasAudio:true});
+  const words='this one habit doubled my income in six months'.split(' ').map((text,i)=>({id:i,text,start:1+i*0.4,end:1.35+i*0.4}));
+  const job={id:'j',name:'J',clips:[{ref:speaker,words}],style:styleOf(undefined)};
+  const logo=logoClip({hash:'b'.repeat(64),name:'logo.png',width:400,height:200});
+  const cut=(items:Parameters<typeof placeLogos>[3])=>buildCut(job,[{clip:'c1',from:0,to:8}],{logo:{ref:logo,items}});
+
+  it('puts a corner logo inside the margin, its height from the image shape',()=>{
+    const doc=cut([{id:'mark',size:0.1}]);
+    const [l]=doc.logos;
+    expect(doc.clips.some(c=>c.id==='brand-logo')).toBe(true);
+    expect(l!.start).toBe(0);
+    expect(l!.x+l!.w).toBeCloseTo(1-0.04*1080/1920,5);
+    expect(l!.y).toBeCloseTo(0.04,5);
+    const b=placeLogos(job,doc,logo,[{id:'b',corner:'bottom-left',size:0.2}])[0]!;
+    expect(b.y+0.2*1920*0.5/1080).toBeCloseTo(0.96,5);
+    expect(checkEditDoc(doc).filter(i=>/Logo/.test(i.message))).toEqual([]);
+  });
+  it('spans spoken words and drops a span with no length',()=>{
+    const doc=cut([{id:'w',size:0.1,from:{clip:'c1',word:2},to:{clip:'c1',word:4}},{id:'none',size:0.1,from:{clip:'c1',word:4},to:{clip:'c1',word:2}}]);
+    expect(doc.logos.map(l=>l.id)).toEqual(['logo-w']);
+    expect(doc.logos[0]!.end).toBeGreaterThan(doc.logos[0]!.start);
+  });
+  it('renders as a scaled picture over the footage',()=>{
+    const doc=cut([{id:'mark',size:0.1,opacity:0.6}]);
+    const pic=planRender(doc,{['a'.repeat(64)]:'/x/c.mov',['b'.repeat(64)]:'/x/logo.png'}).pictures.find(p=>p.logo);
+    expect(pic?.box?.width).toBe(Math.round(0.1*1920));
+  });
+  it('flags a logo that runs off the frame',()=>{
+    const doc=cut([{id:'mark',size:0.1}]);
+    const bad={...doc,logos:[{...doc.logos[0]!,x:0.95}]};
+    expect(checkEditDoc(bad).some(i=>/Logo/.test(i.message))).toBe(true);
+  });
+});

@@ -33,6 +33,8 @@ import {loudnessLines,sfxLines,soundLookTools} from './sound-look';
 import type {ClipRef,Grade} from '@voxtale/editdoc';
 import type {SfxPlacement} from './cut';
 import {mediaTools} from './media-tools';
+import {logoTools} from './logo-tools';
+import type {LogoPlacement} from './logo';
 import type {Multicam} from './multicam';
 
 export interface Workspace {
@@ -116,6 +118,8 @@ export interface Workspace {
   angles?:Pick<Multicam,'choices'|'auto'>;
   /** Standing rules proposed this edit, for the creator to decide. */
   proposedRules?:{text:string;said:string}[];
+  /** The brand logo over the cut (place_logo): its clip, its file on this machine (a creator clip has none; its path is in media), where and when. */
+  logo?:{ref:ClipRef;path?:string;items:LogoPlacement[]};
 }
 
 /** The doc as the agent last wrote it, next to edit.json: a hand edit shows as a difference. */
@@ -174,7 +178,7 @@ async function findEyes(ws:Workspace,doc:EditDoc):Promise<boolean> {
 export async function save(ws:Workspace):Promise<void> {
   const build=()=>buildCut(ws.job,ws.segments,{graphics:ws.placements.filter(p=>ws.graphics[p.shows??p.id]).map(p=>({...p,placement:ws.graphics[p.shows??p.id]!.place,
     ...(p.variants?{variants:p.variants.filter(v=>ws.graphics[v.id]).map(v=>({id:v.id,placement:ws.graphics[v.id]!.place}))}:{})})),captions:ws.captions,zooms:ws.zooms,broll:ws.broll,text:ws.text,chapters:ws.chapters,...(ws.music?{music:ws.music}:{}),...(ws.wordFixes?.length?{wordFixes:ws.wordFixes}:{}),
-    ...(ws.sfx?{sfx:ws.sfx}:{}),...(ws.grades?{grades:ws.grades}:{}),...(ws.clipSettings?{clipSettings:ws.clipSettings}:{}),...(ws.syncGroups?{multicam:{...ws.syncGroups,...ws.angles}}:{}),
+    ...(ws.sfx?{sfx:ws.sfx}:{}),...(ws.grades?{grades:ws.grades}:{}),...(ws.clipSettings?{clipSettings:ws.clipSettings}:{}),...(ws.syncGroups?{multicam:{...ws.syncGroups,...ws.angles}}:{}),...(ws.logo?{logo:{ref:ws.logo.ref,items:ws.logo.items}}:{}),
     eyesAt:(clip,t)=>ws.eyeCache?.get(eyeKey(clip,t))??undefined,
     edge:(clip,t,side,limit,other)=>{const v=ws.voices?.get(clip);return v?wordEdge(v,t,side,limit,other):t;},
     quiet:(clip,t,side,limit)=>{const v=ws.voices?.get(clip);return v?quietTo(v,t,side,limit):limit;}});
@@ -196,7 +200,7 @@ export async function save(ws:Workspace):Promise<void> {
   await writeFile(join(ws.dir,'edit.json'),JSON.stringify(ws.doc,null,1));
   await writeFile(join(ws.dir,AGENT_EDIT),JSON.stringify(ws.doc));
   await writeFile(join(ws.dir,'state.json'),JSON.stringify({levels:ws.levels,segments:ws.segments,placements:ws.placements,captions:ws.captions,zooms:ws.zooms,broll:ws.broll,text:ws.text,chapters:ws.chapters,music:ws.music,wordFixes:ws.wordFixes,graphics:ws.graphics,finished:ws.finished,hand:ws.hand,
-    sfx:ws.sfx,sfxPeaks:ws.sfxPeaks,grades:ws.grades,clipSettings:ws.clipSettings,angles:ws.angles,proposedRules:ws.proposedRules},null,1));
+    sfx:ws.sfx,sfxPeaks:ws.sfxPeaks,grades:ws.grades,clipSettings:ws.clipSettings,angles:ws.angles,proposedRules:ws.proposedRules,logo:ws.logo??null},null,1));
 }
 
 /** Read the voice track of every speaking clip not read yet. A host that cannot gives none: the editor works from words alone. */
@@ -723,6 +727,8 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
       }}));
   tools.push(...surveyTools(ws));
   tools.push(...soundLookTools(ws,(w,f)=>change(w,f)));
+  tools.push(...mediaTools(ws,(w,f)=>change(w,f)));
+  tools.push(...logoTools(ws,(w,f)=>change(w,f)));
   tools.push(defineTool({name:'finish',description:'End the edit. Call once, after check_cut shows no problems you can fix. Say what you cut, why, and any problem you chose to leave.',
     input:{summary:z.string().min(20).max(2000),
       notes:z.array(z.object({id:z.string().max(120),reply:z.string().min(1).max(REPLY_MAX*2)})).max(100).optional()

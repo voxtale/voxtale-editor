@@ -420,7 +420,7 @@ export async function renderProject(a:At,p:Project,ws:Workspace,o:{out?:string;f
   const t0=Date.now();
   const graphics=Object.fromEntries(Object.entries(ws.graphics).filter(([,g])=>existsSync(g.webm)).map(([id,g])=>[id,g.webm]));
   const why=new Set<string>();
-  const r=await renderEditDoc({doc:finalDoc(p,ws.doc),media:p.sources,graphics,out:file,work:join(a.dir,'render'),subjectMask:m=>nativeSubjectMask(m,w=>why.add(w)),
+  const r=await renderEditDoc({doc:finalDoc(p,ws.doc),media:{...p.sources,...(ws.logo?.path?{[ws.logo.ref.hash]:ws.logo.path}:{})},graphics,out:file,work:join(a.dir,'render'),subjectMask:m=>nativeSubjectMask(m,w=>why.add(w)),
     ...(o.fontsDir&&existsSync(o.fontsDir)?{fontsDir:o.fontsDir}:{}),...(o.progress?{progress:o.progress}:{}),...(o.output?{output:o.output}:{})});
   const seconds=(Date.now()-t0)/1000,i=await probe(file),[n,d]=i.rate.split('/').map(Number);
   const doc=ws.doc;
