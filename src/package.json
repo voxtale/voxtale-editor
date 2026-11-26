@@ -1,0 +1,30 @@
+{
+  "name": "voxtale-editor",
+  "version": "0.1.0",
+  "description": "VoxTale editor core: edit model, agent tools, local MCP server, renderers. Consumers import only the entrypoints below.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./video/editor/local-mcp/index.ts",
+    "./mcp": "./video/editor/local-mcp/index.ts",
+    "./video": "./video/index.ts",
+    "./video/local": "./video/local.ts",
+    "./video/editor": "./video/editor/index.ts",
+    "./video/editor/jobs": "./video/editor/jobs.ts",
+    "./video/editor/local": "./video/editor/local.ts",
+    "./video/editor/mcp": "./video/editor/local-mcp/index.ts",
+    "./video/editor/agent-sdk": "./video/editor/agent/adapters/sdk.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.292",
+    "@remotion/bundler": "4.0.522",
+    "@remotion/renderer": "4.0.522",
+    "@voxtale/editdoc": "workspace:*",
+    "@voxtale/frames": "workspace:*",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.522",
+    "typescript": "^5.9.3",
+    "zod": "3.25.76"
+  }
+}

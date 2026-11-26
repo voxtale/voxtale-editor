@@ -1,0 +1,29 @@
+{
+  "name": "voxtale-editor-workspace",
+  "version": "0.1.0",
+  "description": "VoxTale editor: a local MCP video editor any agent can drive over stdio against a folder of clips.",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "src",
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "mcp": "bun apps/editor-mcp/src/main.ts",
+    "editor": "bun src/cli.ts",
+    "test": "bun test tests",
+    "typecheck": "tsc --noEmit && cd apps/editor-mcp && bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.3",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@voxtale/editdoc": "workspace:*",
+    "@voxtale/frames": "workspace:*",
+    "voxtale-editor": "workspace:*"
+  }
+}

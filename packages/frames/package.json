@@ -1,0 +1,35 @@
+{
+  "name": "@voxtale/frames",
+  "version": "0.1.0",
+  "description": "VoxTale frame host: filmstrips, join sheets, frames and graphic checks from local files (ffmpeg), and the relay that lets a cloud agent run ask the creator's desktop for them. No prompts, no model calls.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./limits": "./src/limits.ts"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./limits": {
+        "types": "./dist/limits.d.ts",
+        "default": "./dist/limits.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/add-js-ext.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@voxtale/editdoc",
+  "version": "0.1.0",
+  "description": "VoxTale edit document: types, zod validation and pure helpers shared by the cloud planner and VoxTale Desktop. No I/O, no prompts, no model calls.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/add-js-ext.mjs"
+  },
+  "dependencies": {
+    "zod": "4.3.6"
+  }
+}

@@ -1,0 +1,1 @@
+{"name":"voxtale-graphics-sandbox","private":true,"type":"module","dependencies":{"remotion":"4.0.522","@remotion/bundler":"4.0.522","@remotion/renderer":"4.0.522","react":"19.1.0","react-dom":"19.1.0","zod":"4.3.6"}}

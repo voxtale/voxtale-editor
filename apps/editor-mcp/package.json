@@ -1,0 +1,18 @@
+{
+  "name": "@voxtale-editor/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The VoxTale editor as a local MCP server (stdio). Run from a repo checkout; never deployed.",
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "voxtale-editor": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.3",
+    "typescript": "^5.9.3"
+  }
+}
