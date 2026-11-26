@@ -4,7 +4,7 @@
 // (apps/editor-mcp) only wires it up.
 //
 // Beyond the editor tools: open/resume a project, render, sheet, clips (file
-// paths), export_timeline (FCPXML/OTIO + SRT), editing_guide. With
+// paths), export_timeline (Premiere/Resolve xmeml, FCPXML, OTIO + SRT), editing_guide. With
 // OPENROUTER_API_KEY, open also labels the footage (find_footage,
 // screen_activity), as the cloud planner does. Resources: the
 // EditDoc schema, a guide to reading it, and the current edit. Prompt:
@@ -13,7 +13,8 @@ import {existsSync} from 'node:fs';
 import {readFile,writeFile} from 'node:fs/promises';
 import {homedir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {editDocJsonSchema,STYLE_PRESETS,toFcpxml,toOtio,toSrt} from '@voxtale/editdoc';
+import {editDocJsonSchema,EXPORT_TARGETS,exportTimeline,STYLE_PRESETS,toSrt,type ExportTarget} from '@voxtale/editdoc';
+import {EXPORT_TIMELINE_DESCRIPTION} from './export-guide';
 import {uvFaceFinder} from '../../../native/uv-faces';
 import type {VisionModel} from '../../footage-index';
 import {askVision} from '../../openrouter';
@@ -181,22 +182,39 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
         return {text:JSON.stringify({editDoc:resolve(a.dir,'edit.json'),clips:clipFiles(p),...(graphics.length?{graphics}:{})},null,1)};
       }},
 
-    {name:'export_timeline',description:'Write the edit as a timeline other editors open: fcpxml (DaVinci Resolve, Final Cut Pro, Premiere) or otio (OpenTimelineIO). Also writes the captions as an .srt next to it. The timeline plays the original files: zooms, graphics, text cards and caption looks do not carry over (say so to the creator).',
-      input:{format:z.enum(['fcpxml','otio']),out:z.string().optional().describe('file, absolute or relative to the folder; default <folder>/edit.<format>')},
-      run:async({format,out})=>{
+    {name:'export_timeline',description:EXPORT_TIMELINE_DESCRIPTION,
+      input:{
+        target:z.enum(EXPORT_TARGETS as [ExportTarget,...ExportTarget[]]).optional().describe('premiere, resolve, finalcut or otio'),
+        format:z.enum(['fcpxml','otio']).optional().describe('old name: fcpxml = finalcut'),
+        out:z.string().optional().describe('file, absolute or relative to the folder; default <folder>/edit-<target>.<ext>'),
+      },
+      run:async({target,format,out})=>{
         const {a,p,ws}=current();
         if(!ws.doc)return {text:'No cut yet: set_cut first.',isError:true};
+        const to:ExportTarget|undefined=target??(format==='fcpxml'?'finalcut':format==='otio'?'otio':undefined);
+        if(!to)return {text:`Say which app: target ${EXPORT_TARGETS.join(', ')}.`,isError:true};
         const doc=finalDoc(p,ws.doc);
-        const media={clipPath:(c:{hash:string;id:string})=>{
-          const f=p.sources[c.hash];
-          if(!f)throw new Error(`no file for clip ${c.id}`);
-          return f;
-        }};
-        const file=resolve(a.folder,out??`edit.${format}`),srt=file.replace(/\.[^./\\]+$/,'')+'.srt';
-        await writeFile(file,format==='fcpxml'?toFcpxml(doc,media):JSON.stringify(toOtio(doc,media),null,1));
+        const media={
+          clipPath:(c:{hash:string;id:string})=>{
+            const f=p.sources[c.hash];
+            if(!f)throw new Error(`no file for clip ${c.id}`);
+            return f;
+          },
+          // Rendered graphics are WebM with alpha (Premiere needs a WebM plug-in to read it).
+          graphicPath:(g:{assetId:string})=>{
+            const r=ws.graphics[g.assetId];
+            return r?{path:resolve(r.webm),duration:r.seconds,fps:doc.fps}:undefined;
+          },
+        };
+        const r=exportTimeline(doc,media,to);
+        const file=resolve(a.folder,out??`edit-${to}.${r.extension}`),srt=file.replace(/\.[^./\\]+$/,'')+'.srt';
+        await writeFile(file,r.text);
         await writeFile(srt,toSrt(doc));
         const missing=p.job.clips.filter(c=>!existsSync(p.sources[c.ref.hash]??'')).map(c=>c.ref.name);
-        return {text:`${file}\n${srt}${missing.length?`\nmissing on disk (the editor will ask for them): ${missing.join(', ')}`:''}`};
+        const lost=r.losses.map(l=>`- ${l.feature}: ${l.note} (${l.items.slice(0,6).join(', ')}${l.items.length>6?` +${l.items.length-6}`:''})`);
+        return {text:[`${r.app}, ${r.format}`,file,srt,
+          ...(lost.length?['not carried:',...lost]:['everything in the edit carried']),
+          ...(missing.length?[`missing on disk (the editor will ask for them): ${missing.join(', ')}`]:[])].join('\n')};
       }},
     ...styleTools({root,current:()=>open&&at?{ws:open.ws,keep:()=>keepProject(at!,open!.p,open!.ws)}:undefined}),
   ];

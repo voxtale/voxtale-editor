@@ -1,0 +1,1024 @@
+{
+  "OTIO_SCHEMA": "Timeline.1",
+  "name": "Export sample",
+  "global_start_time": {
+    "OTIO_SCHEMA": "RationalTime.1",
+    "rate": 25,
+    "value": 0
+  },
+  "metadata": {
+    "voxtale": {
+      "editId": "ed1",
+      "revision": 0
+    }
+  },
+  "tracks": {
+    "OTIO_SCHEMA": "Stack.1",
+    "name": "tracks",
+    "children": [
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "A-roll",
+        "kind": "Video",
+        "children": [
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "a1",
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {
+              "voxtale": {
+                "itemId": "a1",
+                "clipId": "camB",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "angle": "camB",
+                "mic": "lav"
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 90025
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 75
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "camB.mp4",
+                "target_url": "/footage/camB.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 90000
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "a2",
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {
+              "voxtale": {
+                "itemId": "a2",
+                "clipId": "camA",
+                "owner": "agent",
+                "stage": null,
+                "reason": null
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 150
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 50
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "camA.mp4",
+                "target_url": "/footage/camA.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "a3",
+            "effects": [],
+            "markers": [],
+            "enabled": false,
+            "metadata": {
+              "voxtale": {
+                "itemId": "a3",
+                "clipId": "camA",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "layout": "split",
+                "box": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 960,
+                  "height": 1080
+                }
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 225
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 25
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "camA.mp4",
+                "target_url": "/footage/camA.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "a4",
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {
+              "voxtale": {
+                "itemId": "a4",
+                "clipId": "camA",
+                "owner": "agent",
+                "stage": null,
+                "reason": null
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 10
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "camA.mp4",
+                "target_url": "/footage/camA.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          }
+        ],
+        "source_range": null,
+        "effects": [],
+        "markers": [],
+        "enabled": true,
+        "metadata": {}
+      },
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "A-roll layout",
+        "kind": "Video",
+        "children": [
+          {
+            "OTIO_SCHEMA": "Gap.1",
+            "name": "",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 75
+              }
+            },
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {}
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "a2",
+            "effects": [],
+            "markers": [],
+            "enabled": false,
+            "metadata": {
+              "voxtale": {
+                "itemId": "a2",
+                "clipId": "camB",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "layout": "pip",
+                "box": {
+                  "x": 58,
+                  "y": 58,
+                  "width": 538,
+                  "height": 302
+                }
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 90125
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 50
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "camB.mp4",
+                "target_url": "/footage/camB.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 90000
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "a3",
+            "effects": [],
+            "markers": [],
+            "enabled": false,
+            "metadata": {
+              "voxtale": {
+                "itemId": "a3",
+                "clipId": "camB",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "layout": "split",
+                "box": {
+                  "x": 960,
+                  "y": 0,
+                  "width": 960,
+                  "height": 1080
+                }
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 90200
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 25
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "camB.mp4",
+                "target_url": "/footage/camB.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 90000
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          }
+        ],
+        "source_range": null,
+        "effects": [],
+        "markers": [],
+        "enabled": true,
+        "metadata": {}
+      },
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "B-roll",
+        "kind": "Video",
+        "children": [
+          {
+            "OTIO_SCHEMA": "Gap.1",
+            "name": "",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 25
+              }
+            },
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {}
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "b1",
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {
+              "voxtale": {
+                "itemId": "b1",
+                "clipId": "br",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "crop": {
+                  "x": 0.25,
+                  "y": 0.25,
+                  "w": 0.5,
+                  "h": 0.5
+                },
+                "speed": 2
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 25
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "br.mp4",
+                "target_url": "/footage/br.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          }
+        ],
+        "source_range": null,
+        "effects": [],
+        "markers": [],
+        "enabled": true,
+        "metadata": {}
+      },
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "Speaker",
+        "kind": "Video",
+        "children": [
+          {
+            "OTIO_SCHEMA": "Gap.1",
+            "name": "",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 25
+              }
+            },
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {}
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "b1",
+            "effects": [],
+            "markers": [],
+            "enabled": false,
+            "metadata": {
+              "voxtale": {
+                "itemId": "b1",
+                "clipId": "camA",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "layout": "speaker-pip",
+                "box": {
+                  "x": 1324,
+                  "y": 720,
+                  "width": 538,
+                  "height": 302
+                }
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 75
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 25
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "camA.mp4",
+                "target_url": "/footage/camA.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          }
+        ],
+        "source_range": null,
+        "effects": [],
+        "markers": [],
+        "enabled": true,
+        "metadata": {}
+      },
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "Graphics",
+        "kind": "Video",
+        "children": [
+          {
+            "OTIO_SCHEMA": "Gap.1",
+            "name": "",
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 100
+              }
+            },
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {}
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "g1",
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {
+              "voxtale": {
+                "itemId": "g1",
+                "clipId": null,
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "fit": "contain"
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 25
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "gfx1.webm",
+                "target_url": "/renders/gfx1.webm",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 50
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          }
+        ],
+        "source_range": null,
+        "effects": [],
+        "markers": [],
+        "enabled": true,
+        "metadata": {}
+      },
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "A-roll audio",
+        "kind": "Audio",
+        "children": [
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "a1",
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {
+              "voxtale": {
+                "itemId": "a1",
+                "clipId": "lav",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "mic": "lav",
+                "audioFadeIn": 0.01,
+                "audioFadeOut": 0.01
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 36
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 75
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "lav.mp4",
+                "target_url": "/footage/lav.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "a2",
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {
+              "voxtale": {
+                "itemId": "a2",
+                "clipId": "camA",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "audioFadeIn": 0.01,
+                "audioFadeOut": 0.01
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 150
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 50
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "camA.mp4",
+                "target_url": "/footage/camA.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "a3",
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {
+              "voxtale": {
+                "itemId": "a3",
+                "clipId": "camA",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "gainDb": -3,
+                "audioFadeIn": 0.01,
+                "audioFadeOut": 0.01
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 225
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 25
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "camA.mp4",
+                "target_url": "/footage/camA.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          },
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "a4",
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {
+              "voxtale": {
+                "itemId": "a4",
+                "clipId": "camA",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "audioFadeIn": 0.01,
+                "audioFadeOut": 0.01
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 10
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "camA.mp4",
+                "target_url": "/footage/camA.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          }
+        ],
+        "source_range": null,
+        "effects": [],
+        "markers": [],
+        "enabled": true,
+        "metadata": {}
+      },
+      {
+        "OTIO_SCHEMA": "Track.1",
+        "name": "Music",
+        "kind": "Audio",
+        "children": [
+          {
+            "OTIO_SCHEMA": "Clip.2",
+            "name": "m1",
+            "effects": [],
+            "markers": [],
+            "enabled": true,
+            "metadata": {
+              "voxtale": {
+                "itemId": "m1",
+                "clipId": "song",
+                "owner": "agent",
+                "stage": null,
+                "reason": null,
+                "gainDb": -18,
+                "audioFadeIn": 1,
+                "audioFadeOut": 1,
+                "duck": [
+                  {
+                    "time": 0,
+                    "db": -12
+                  },
+                  {
+                    "time": 6.4,
+                    "db": -12
+                  }
+                ]
+              }
+            },
+            "source_range": {
+              "OTIO_SCHEMA": "TimeRange.1",
+              "start_time": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 0
+              },
+              "duration": {
+                "OTIO_SCHEMA": "RationalTime.1",
+                "rate": 25,
+                "value": 160
+              }
+            },
+            "active_media_reference_key": "DEFAULT_MEDIA",
+            "media_references": {
+              "DEFAULT_MEDIA": {
+                "OTIO_SCHEMA": "ExternalReference.1",
+                "name": "song.mp4",
+                "target_url": "/footage/song.mp4",
+                "available_range": {
+                  "OTIO_SCHEMA": "TimeRange.1",
+                  "start_time": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 0
+                  },
+                  "duration": {
+                    "OTIO_SCHEMA": "RationalTime.1",
+                    "rate": 25,
+                    "value": 1500
+                  }
+                },
+                "available_image_bounds": null,
+                "metadata": {}
+              }
+            }
+          }
+        ],
+        "source_range": null,
+        "effects": [],
+        "markers": [],
+        "enabled": true,
+        "metadata": {}
+      }
+    ],
+    "source_range": null,
+    "effects": [],
+    "markers": [
+      {
+        "OTIO_SCHEMA": "Marker.2",
+        "name": "Part two",
+        "color": "RED",
+        "comment": "",
+        "metadata": {},
+        "marked_range": {
+          "OTIO_SCHEMA": "TimeRange.1",
+          "start_time": {
+            "OTIO_SCHEMA": "RationalTime.1",
+            "rate": 25,
+            "value": 75
+          },
+          "duration": {
+            "OTIO_SCHEMA": "RationalTime.1",
+            "rate": 25,
+            "value": 0
+          }
+        }
+      },
+      {
+        "OTIO_SCHEMA": "Marker.2",
+        "name": "Jane Doe",
+        "color": "YELLOW",
+        "comment": "lowerThird: Host (2.00s)",
+        "metadata": {},
+        "marked_range": {
+          "OTIO_SCHEMA": "TimeRange.1",
+          "start_time": {
+            "OTIO_SCHEMA": "RationalTime.1",
+            "rate": 25,
+            "value": 25
+          },
+          "duration": {
+            "OTIO_SCHEMA": "RationalTime.1",
+            "rate": 25,
+            "value": 0
+          }
+        }
+      }
+    ],
+    "enabled": true,
+    "metadata": {}
+  }
+}
