@@ -315,8 +315,9 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
   // Graphics render at the canvas size, the speaker's frame; another clip's size gets stretched onto it.
   const canvas=()=>(ws.job.clips.find(speaking)??ws.job.clips[0]!).ref;
   async function renderInto(id:string,html:string,seconds:number,c:Job['clips'][number],t:number,face:Face|undefined,stills:number[],place:GraphicItem['placement']) {
-    const ref=canvas(),width=ref.width??1920;
-    const r=await ws.frames.graphic({id,html:withMotionKit(html),kitCss:kitCss(width,face),width,height:ref.height??1080,seconds,stills,backdrop:{clip:c.ref.hash,t:t+0.3}});
+    const ref=canvas(),width=ref.width??1920,brand=ws.job.styleUse?.graphics;
+    const r=await ws.frames.graphic({id,html:withMotionKit(html),kitCss:kitCss(width,face)+(brand?.css?`\n/* brand */\n${brand.css}`:''),
+      width,height:ref.height??1080,seconds,stills,backdrop:{clip:c.ref.hash,t:t+0.3},...(brand?.files.length?{files:brand.files}:{})});
     if(r.ok&&r.webm){ws.graphics[id]={webm:r.webm,seconds,place};await save(ws);}
     else delete ws.graphics[id];
     return {text:`${r.ok?'rendered':'FAILED'} ${id}\n${r.report}${r.ok?`\nstills at ${stills.map(x=>x.toFixed(1)).join(', ')}s, over the speaker`:''}`,

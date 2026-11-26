@@ -2,6 +2,8 @@
 
 ``python -m voxtale_native faces`` reads {images_b64: [...]} on stdin and
 writes {faces: [...]} (largest face per still, or null) on stdout.
+``python -m voxtale_native analyse`` measures a reference video's editing style
+(see analyse.py).
 """
 
 from __future__ import annotations
@@ -17,7 +19,13 @@ def _faces(req: dict) -> dict:
     return {"faces": [largest_face(base64.b64decode(b)) for b in req["images_b64"]]}
 
 
-OPS = {"faces": _faces}
+def _analyse(req: dict) -> dict:
+    from voxtale_native.analyse import handle
+
+    return handle(req)
+
+
+OPS = {"faces": _faces, "analyse": _analyse}
 
 
 def main(argv: list[str]) -> int:

@@ -104,6 +104,7 @@ export function taskPrompt(job:Job,graphics:boolean,kept=false):string {
     `Clips: ${speakers.length?'':'none speak; place footage with set_cut shot segments.'}${speakers.map(c=>`${c.ref.id} "${c.ref.name}" ${c.ref.duration.toFixed(1)}s ${c.ref.width}x${c.ref.height}`).join('; ')}.`,
     job.targetSeconds?`Target length: ${job.targetSeconds}s (85-115% is fine).`:`No target length: cut everything that does not earn its place.`,
     `Style "${job.style.id}": about ${p.targetCutsPerMinute} cuts/min, pauses over ${p.maxPauseSeconds}s trimmed, shots at least ${p.minShotSeconds}s.`,
+    ...(job.styleUse?.lines??[]),
     p.captions==='off'?`Captions: off for this style.`:`Captions: on, but only for the spans you set with set_captions.${kept?' The creator chose their look: do not pass look.':' Pick their look too.'}`,
     graphics?`Graphics: on. Canvas ${v.width}x${v.height}. Design each one with render_graphic (see the skill).`:`Graphics: off (no graphics tools).`,
     footageClips(job).length?`Other footage (find_footage for what each shows when; survey_clips to look at each before you choose or place it; show_footage lays it over the voice, a set_cut shot segment places it as its own stretch of the cut with its own sound):\n${footageClips(job).map(c=>{

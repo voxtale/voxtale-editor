@@ -45,7 +45,7 @@ export function badFrameCall(c:unknown):string|null {
       const j=call.job;
       return j&&GRAPHIC_ID.test(String(j.id))&&typeof j.html==='string'&&j.html.length<=200_000&&typeof j.kitCss==='string'&&j.kitCss.length<=50_000&&
         num(j.width,16,3840)&&num(j.height,16,3840)&&num(j.seconds,0.1,30)&&Array.isArray(j.stills)&&j.stills.length<=6&&
-        j.stills.every(t=>num(t,0,30))&&point(j.backdrop)?null:'bad graphic';
+        j.stills.every(t=>num(t,0,30))&&point(j.backdrop)&&j.files===undefined?null:'bad graphic';  // files: local paths, never from a remote caller
     }
     case 'sample':
       return HASH.test(String(call.clip))&&num(call.every,0.25,60)&&num(call.width,8,256)&&num(call.height,8,256)&&Number.isInteger(call.width)&&Number.isInteger(call.height)?null:'bad sample';

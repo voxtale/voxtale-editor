@@ -15,6 +15,8 @@ import {
   type ARollItem,type Fps,type Grade,type TransitionKind,type ZoomCurve,type ZoomItem,type BRollItem,type ClipIndex,type ClipRef,type EditDoc,type EditStyle,type GraphicItem,type PipCorner,type SourceWord,type TextItem,type WordFix,
 } from '@voxtale/editdoc';
 
+import type {StyleUse} from '../styles/use';
+
 export interface Word {id:number;text:string;start:number;end:number}
 /** A clip as the agent works on it: its ref, words, index and moments. Frames come from the frame host, by hash. */
 export interface JobClip {ref:ClipRef;words:Word[];index?:ClipIndex;moments?:ClipMoments}
@@ -24,6 +26,8 @@ export const speaking=(c:JobClip)=>c.ref.role==='a-roll';
 export interface Job {id:string;name:string;clips:JobClip[];style:EditStyle;targetSeconds?:number;instruction?:string;project?:ProjectBrief;
   /** The creator's standing rules, accepted on earlier edits (../rules.ts). */
   rules?:string[];
+  /** The style folder this edit follows (../styles): its brief lines and brand files for graphics. */
+  styleUse?:StyleUse;
   /** Clips recorded together, by clip id: `clip` time = `with` time + offset. */
   sync?:ClipSync[]}
 /**

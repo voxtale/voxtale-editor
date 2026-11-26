@@ -216,16 +216,18 @@ describe('standing rules (ghk4)',()=>{
     expect(brief).toContain('propose_rule');
     expect(taskPrompt(job([speaker],{instruction:'tighten the intro'}),false)).not.toContain('propose_rule');
   });
-  test('local editor MCP: rules lists the file, decide_rule writes the answer',async()=>{
-    const dir=await tmp('rules-mcp-'),file=join(dir,'rules.json');
+  test('local editor MCP: the old rules file moves into a style; decide_rule writes the answer into its rules.md',async()=>{
+    const dir=await tmp('rules-mcp-'),file=join(dir,'rules.json'),styles=join(dir,'styles');
     const p=proposeRule([],{text:'Captions always in yellow',said:'always yellow captions'});
     await writeFile(file,JSON.stringify(p.rules));
-    const answer=mcpHandler(localEditorServer({folder:dir,graphics:false,rulesFile:file,vision:null},()=>()=>{}));
+    const answer=mcpHandler(localEditorServer({folder:dir,graphics:false,rulesFile:file,stylesDir:styles,vision:null},()=>()=>{}));
     const req=(name:string,args:object)=>answer({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}}) as Promise<any>;
     expect((await req('rules',{})).result.content[0].text).toContain('[proposed] Captions always in yellow');
     const out=(await req('decide_rule',{id:p.rule.id,decision:'accept',text:'Captions in yellow'})).result.content[0].text;
     expect(out).toContain('[accepted] Captions in yellow');
-    expect(acceptedRules(await fileRules(file).load()).map(r=>r.text)).toEqual(['Captions in yellow']);
+    expect(await readFile(join(styles,'my-style','rules.md'),'utf8')).toContain('- Captions in yellow _(added');
     expect((await req('decide_rule',{id:'rule-nope',decision:'refuse'})).result.isError).toBe(true);
+    // No edit open, no style named: the agent must ask which style.
+    expect((await req('propose_rule',{rule:'Logo top right',said:'always'})).result.isError).toBe(true);
   });
 });
