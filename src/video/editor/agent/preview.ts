@@ -5,7 +5,7 @@
 // the frame host, so a cloud run can watch a cut whose files it never holds.
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
-import {pipBox,zoomAt,type EditDoc} from '@voxtale/editdoc';
+import {lerpKeys,pipBox,trackAt,zoomAt,type EditDoc} from '@voxtale/editdoc';
 import type {FrameHost} from './frames';
 
 type Box={x:number;y:number;width:number;height:number};
@@ -22,6 +22,8 @@ export interface PreviewLayer {
   box?:Box;
   /** Scale about the centre and shift (fractions of the canvas). */
   zoom?:{scale:number;dx:number;dy:number};
+  /** Auto reframe: the crop's centre, a fraction of the source width (cover fit only). */
+  center?:number;
 }
 
 export interface PreviewShot {
@@ -29,7 +31,9 @@ export interface PreviewShot {
   t:number;
   layers:PreviewLayer[];
   /** Rendered overlays up at `t`, with the second into each; behind: the speaker is drawn back over it. */
-  graphics:{webm:string;t:number;behind?:boolean}[];
+  graphics:{webm:string;t:number;behind?:boolean;
+    /** A pinned graphic's shift, fractions of the canvas. */
+    shift?:{x:number;y:number}}[];
   /** Brand logos up at `t`, drawn last: the image file, top-left and width as fractions of the canvas. */
   logos?:{file:string;x:number;y:number;w:number;opacity:number}[];
   /** What is on screen and in the mix, in words. */
@@ -57,6 +61,8 @@ export function previewTimes(start:number,end:number,count:number):number[] {
 export function previewShots(doc:EditDoc,times:number[],hashOf:(clipId:string)=>string|undefined,webmOf:(assetId:string)=>string|undefined,
   logoOf:(clipId:string)=>string|undefined=()=>undefined):PreviewShot[] {
   const kind=new Map(doc.clips.map(c=>[c.id,c.kind]));
+  const reframe=new Map(doc.clips.flatMap(c=>c.kind==='video'&&c.reframe?.keys.length?[[c.id,c.reframe] as const]:[]));
+  const center=(clipId:string,t:number)=>{const r=reframe.get(clipId);return r?{center:lerpKeys(r.keys,t,k=>k.x)}:{};};
   return times.map(t=>{
     const layers:PreviewLayer[]=[],notes:string[]=[],graphics:PreviewShot['graphics']=[];
     const a=on(doc.tracks['a-roll'],t)[0];
@@ -64,14 +70,15 @@ export function previewShots(doc:EditDoc,times:number[],hashOf:(clipId:string)=>
     const at=a?a.in+(t-a.start):0;
     if(a&&speaker) {
       const z=zoomAt(doc.tracks.zoom,t);
-      layers.push({clip:speaker,t:at,fit:'cover',...(Math.abs(z.scale-1)>1e-3?{zoom:z}:{})});
+      layers.push({clip:speaker,t:at,fit:'cover',...(a.layout!=='split'?center(a.clipId,at):{}),...(Math.abs(z.scale-1)>1e-3?{zoom:z}:{})});
       notes.push(Math.abs(z.scale-1)>1e-3?`speaker, zoom ${z.scale.toFixed(2)}x`:'speaker');
     } else if(!a)notes.push('NO SPEAKER: gap in the cut');
     for(const b of on(doc.tracks['b-roll'],t)) {
       const hash=hashOf(b.clipId);
       if(!hash)continue;
       const speed=b.speed??1;
-      layers.push({clip:hash,t:kind.get(b.clipId)==='image'?0:b.in+(t-b.start)*speed,fit:b.fit,...(b.crop?{crop:b.crop}:{})});
+      const bt=kind.get(b.clipId)==='image'?0:b.in+(t-b.start)*speed;
+      layers.push({clip:hash,t:bt,fit:b.fit,...(b.crop?{crop:b.crop}:b.fit==='cover'?center(b.clipId,bt):{})});
       notes.push(`footage ${b.id}${b.crop?' (cropped)':''}${speed!==1?` at ${speed}x`:''}`);
       if(b.pip&&speaker) {
         layers.push({clip:speaker,t:at,fit:'cover',box:pipBox(doc.canvas,b.pip)});
@@ -80,7 +87,8 @@ export function previewShots(doc:EditDoc,times:number[],hashOf:(clipId:string)=>
     }
     for(const g of on(doc.tracks.graphics,t)) {
       const webm=webmOf(g.assetId);
-      if(webm)graphics.push({webm,t:t-g.start,...(g.behindSubject&&speaker?{behind:true}:{})});
+      const sh=g.track?trackAt(g.track,t-g.start):null;
+      if(webm)graphics.push({webm,t:t-g.start,...(g.behindSubject&&speaker?{behind:true}:{}),...(sh&&(sh.dx||sh.dy)?{shift:{x:sh.dx,y:sh.dy}}:{})});
       notes.push(`graphic ${g.assetId} (${g.placement}${g.behindSubject?', behind the speaker':''}${webm?'':', not drawn'})`);
     }
     const logos:NonNullable<PreviewShot['logos']>=[];
@@ -141,7 +149,7 @@ export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;he
       const bw=even((l.box?.width??canvas.width)*k),bh=even((l.box?.height??canvas.height)*k);
       const crop=l.crop?`crop=iw*${l.crop.w}:ih*${l.crop.h}:iw*${l.crop.x}:ih*${l.crop.y},`:'';
       const fit=l.fit==='cover'
-        ?`scale=${bw}:${bh}:force_original_aspect_ratio=increase,crop=${bw}:${bh}`
+        ?`scale=${bw}:${bh}:force_original_aspect_ratio=increase,crop=${bw}:${bh}${l.center!==undefined?`:x='clip(iw*${l.center.toFixed(4)}-${bw}/2,0,iw-${bw})':y='(ih-${bh})/2'`:''}`
         :`scale=${bw}:${bh}:force_original_aspect_ratio=decrease,pad=${bw}:${bh}:(ow-iw)/2:(oh-ih)/2:black`;
       const z=l.zoom;
       const zoom=z?`,scale=${even(bw*z.scale)}:${even(bh*z.scale)}`:'';
@@ -161,7 +169,7 @@ export async function drawPreview(o:{shots:PreviewShot[];canvas:{width:number;he
     for(const g of s.graphics) {
       // Alpha-aware VP9 decode, as the render does.
       inputs.push('-c:v','libvpx-vp9','-ss',String(Math.max(0,g.t)),'-i',g.webm);
-      graph.push(`[${idx}:v]scale=${cw}:${ch}[l${idx}]`,`[${last}][l${idx}]overlay=0:0[o${idx}]`);
+      graph.push(`[${idx}:v]scale=${cw}:${ch}[l${idx}]`,`[${last}][l${idx}]overlay=${Math.round((g.shift?.x??0)*cw)}:${Math.round((g.shift?.y??0)*ch)}[o${idx}]`);
       last=`o${idx}`;
       idx++;
     }

@@ -11,7 +11,7 @@ import {join} from 'node:path';
 import {
   CAPTION_DIM,CAPTION_POP,captionLook,captionPlacement,captionText,captionWords,cutFade,dbToVolume,duckPoints,lanes,limiterCeiling,loudnessGain,mixSpeech,parseLoudness,
   shown,textContent,toSrt,textLook,textPosition,pipBox,transitionJoins,zoomKeysBetween,
-  SETTLE_BACK,splitBoxes,companionSources,speechSounds,clipLut,parseCube,pictureSource,writeCube,LUT_SIZE,type Easing,type EditDoc,type LoudnessLevel,type ZoomKey,type ZoomProperty,
+  SETTLE_BACK,splitBoxes,companionSources,speechSounds,clipLut,parseCube,pictureSource,writeCube,LUT_SIZE,type Easing,type EditDoc,type MotionTrack,type Reframe,trackAt,type LoudnessLevel,type ZoomKey,type ZoomProperty,
 } from '@voxtale/editdoc';
 import {run} from './media';
 import {writeLibrary} from './sfx';
@@ -97,7 +97,7 @@ export class MissingMediaError extends Error {
 
 // ---- timeline model ---------------------------------------------------------------
 
-interface Picture {
+export interface Picture {
   itemId:string;
   path:string;
   kind:'video'|'image'|'graphic';
@@ -122,6 +122,10 @@ interface Picture {
   mask?:{path:string;in:number};
   /** The brand logo: scaled to box.width, its own shape and see-through kept, no border, top-left at box.x,box.y. */
   logo?:true;
+  /** Auto reframe (cover fit, whole frame): the crop follows the speaker instead of the middle. */
+  reframe?:Reframe;
+  /** A graphic pinned to the set: it moves with the spot (offsets in canvas fractions, item seconds). */
+  track?:MotionTrack;
 }
 /** Fade to or from see-through (no colour) or a flat colour; slide across (fractions of the width); scale up or down; blur sideways. */
 export type PictureFx=
@@ -139,6 +143,8 @@ interface Sound {
   duck:{time:number;value:number}[];
 }
 interface Caption {start:number;end:number;layer:number;lines:{text:string;x:number;y:number;
+  /** Moves in a straight line from x,y to here over the event (a motion-tracked text). */
+  to?:{x:number;y:number};
   /** Ready ASS text with its own override tags, used as is. */
   ass?:string}[];style:string;tags:string}
 
@@ -224,7 +230,7 @@ export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Reco
         const g=item as EditDoc['tracks']['graphics'][number];
         const path=graphics[g.assetId];
         if(!path) {skipped.push({itemId:g.id,reason:'graphic-not-ready'});continue;}
-        pictures.push({itemId:g.id,path,kind:'graphic',fs,fe,start:g.start,in:0,fit:'contain',opacity:1,zoom:[]});
+        pictures.push({itemId:g.id,path,kind:'graphic',fs,fe,start:g.start,in:0,fit:'contain',opacity:1,zoom:[],...(g.track?{track:g.track}:{})});
         behind.push(g.id);
         continue;
       }
@@ -245,6 +251,7 @@ export function planRender(doc:EditDoc,media:Record<string,string>,graphics:Reco
         fit:b?b.fit:'cover',opacity:b?b.opacity:1,
         zoom:a&&!split?zoomKeysBetween(doc.tracks.zoom,c.start,c.end,doc.canvas):[],
         ...(halves?{box:halves[0]}:{}),
+        ...(clip?.kind==='video'&&clip.reframe&&!halves&&!b?.crop&&(b?b.fit==='cover':true)?{reframe:clip.reframe}:{}),
         ...(b?.crop?{crop:b.crop}:{}),...(b?.speed&&b.speed!==1?{speed:b.speed}:{}),...(luts[src.clipId]?{lut:luts[src.clipId]}:{}),
       });
       // Split: the companion beside (or under, on a tall canvas); pip: the first companion small in a corner.
@@ -382,10 +389,23 @@ export function assScript(doc:EditDoc,fps:number):string {
       const s=assColor(look.shadowColor);
       tags+=`\\bord3\\blur${Math.round((look.shadowBlur??0)/2)}\\3c${s.color}\\3a${s.alpha}`;
     }
-    if(t.fadeIn||t.fadeOut)tags+=`\\fad(${Math.round((t.fadeIn??0)*1000)},${Math.round((t.fadeOut??0)*1000)})`;
-    events.push({...span(t.start,t.end),layer:0,style,tags,lines:lines.map((line,i)=>({
-      text:line,x:pos.x*W,y:pos.y*H+(i-(lines.length-1)/2)*lh,
-    }))});
+    const fad=(a:number,b:number)=>a||b?`\\fad(${Math.round(a*1000)},${Math.round(b*1000)})`:'';
+    const lineAt=(i:number,st:{dx:number;dy:number;s:number})=>({x:(pos.x+st.dx)*W,y:(pos.y+st.dy)*H+(i-(lines.length-1)/2)*lh*st.s});
+    if(t.track) {
+      // Pinned to the set: one event per stretch between track keys, moving in a straight line (\move), scaled (\t) when the set grows.
+      const len=t.end-t.start,times=[...new Set([0,...t.track.keys.map(k=>k.t).filter(x=>x>0&&x<len),len])].sort((a,b)=>a-b);
+      for(let k=0;k+1<times.length;k++) {
+        const a=trackAt(t.track,times[k]!),b=trackAt(t.track,times[k+1]!),when=span(t.start+times[k]!,t.start+times[k+1]!);
+        if(when.end<=when.start)continue;
+        const ms=Math.round((when.end-when.start)*1000),pct=(v:number)=>(v*100).toFixed(1);
+        const grow=Math.abs(a.s-1)>1e-3||Math.abs(b.s-1)>1e-3?`\\fscx${pct(a.s)}\\fscy${pct(a.s)}\\t(0,${ms},\\fscx${pct(b.s)}\\fscy${pct(b.s)})`:'';
+        events.push({...when,layer:0,style,tags:tags+grow+fad(k===0?t.fadeIn??0:0,k+2===times.length?t.fadeOut??0:0),
+          lines:lines.map((line,i)=>({text:line,...lineAt(i,a),to:lineAt(i,b)}))});
+      }
+      continue;
+    }
+    tags+=fad(t.fadeIn??0,t.fadeOut??0);
+    events.push({...span(t.start,t.end),layer:0,style,tags,lines:lines.map((line,i)=>({text:line,...lineAt(i,{dx:0,dy:0,s:1})}))});
   }
   if(captions) {
     const look=captionLook(doc);
@@ -445,7 +465,7 @@ export function assScript(doc:EditDoc,fps:number):string {
     style('Plain',1),style('Box',3),'',
     '[Events]','Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
     ...events.flatMap(e=>e.lines.map(l=>
-      `Dialogue: ${e.layer},${assTime(e.start)},${assTime(e.end)},${e.style},,0,0,0,,{\\an5\\pos(${l.x.toFixed(1)},${l.y.toFixed(1)})${e.tags}}${l.ass??assText(l.text)}`)),
+      `Dialogue: ${e.layer},${assTime(e.start)},${assTime(e.end)},${e.style},,0,0,0,,{\\an5${l.to?`\\move(${l.x.toFixed(1)},${l.y.toFixed(1)},${l.to.x.toFixed(1)},${l.to.y.toFixed(1)})`:`\\pos(${l.x.toFixed(1)},${l.y.toFixed(1)})`}${e.tags}}${l.ass??assText(l.text)}`)),
     '',
   ].join('\n');
 }
@@ -560,13 +580,19 @@ export function keyedExpr(keys:{time:number;value:number;easing?:Easing}[],u:str
 
 const pick=(keys:ZoomKey[],p:ZoomProperty)=>keys.filter(k=>k.property===p);
 
-function pictureFilter(p:Picture,skip:number,frames:number,plan:RenderPlan):string {
+export function pictureFilter(p:Picture,skip:number,frames:number,plan:RenderPlan):string {
   const {width:W,height:H,rate}=plan;
   const f=[p.speed?`setpts=(PTS-STARTPTS)/${num(p.speed)}`:`setpts=PTS-STARTPTS`,`fps=${rate}`,`trim=end_frame=${frames}`];
   if(p.crop)f.push(`crop=w='2*trunc(iw*${num(p.crop.w)}/2)':h='2*trunc(ih*${num(p.crop.h)}/2)':x='iw*${num(p.crop.x)}':y='ih*${num(p.crop.y)}'`);
   if(p.logo&&p.box)f.push(`scale=${p.box.width}:-2`);
   else if(p.box)f.push(`scale=${p.box.width}:${p.box.height}:force_original_aspect_ratio=increase`,`crop=${p.box.width}:${p.box.height}`,
     `drawbox=c=white@0.9:t=${Math.max(2,Math.round(p.box.width/160))}`);
+  else if(p.fit==='cover'&&p.reframe) {
+    // The crop's centre on the speaker's path (source time), clamped inside the frame.
+    const u=`(${num(p.in)}+(t+${num(skip)})*${num(p.speed??1)})`,sp=p.speed??1;
+    const cx=keyedExpr(p.reframe.keys.map(k=>({time:k.t,value:k.x,easing:'linear' as const})),u,p.in+skip*sp,p.in+(skip+frames/plan.fps)*sp);
+    f.push(`scale=${W}:${H}:force_original_aspect_ratio=increase`,`crop=${W}:${H}:x='clip(iw*(${cx})-${W}/2,0,iw-${W})':y='(ih-${H})/2'`);
+  }
   else if(p.fit==='cover')f.push(`scale=${W}:${H}:force_original_aspect_ratio=increase`,`crop=${W}:${H}`);
   else f.push(`scale=${W}:${H}:force_original_aspect_ratio=decrease`);
   f.push('setsar=1');
@@ -612,6 +638,12 @@ function pictureFilter(p:Picture,skip:number,frames:number,plan:RenderPlan):stri
  */
 export const filterPath=(p:string,win=process.platform==='win32')=>(win?p.replace(/\\/g,'/'):p).replace(/:/g,'\\:').replace(/'/g,`'\\\\\\''`);
 
+/** Overlay offsets (pixels) of a pinned graphic at item time `u`: it moves with the spot, its size held. */
+export function trackOverlay(track:MotionTrack,u:string,W:number,H:number):{x:string;y:string} {
+  const keys=(f:(k:MotionTrack['keys'][number])=>number,size:number)=>keyedExpr(track.keys.map(k=>({time:k.t,value:f(k)*size,easing:'linear' as const})),u);
+  return {x:keys(k=>k.dx,W),y:keys(k=>k.dy,H)};
+}
+
 /** Picture of frames [c0, c1): black, then each item over it, then text and captions. */
 function videoChunkArgs(plan:RenderPlan,c0:number,c1:number,assFile:string,fontsDir:string|undefined,out:string,o:{preset:string;crf:number}):{args:string[];graph:string} {
   const {width:W,height:H,rate,fps}=plan;
@@ -643,7 +675,8 @@ function videoChunkArgs(plan:RenderPlan,c0:number,c1:number,assFile:string,fonts
       return `${W}*(${num(x.from)}+${num(x.to-x.from)}*(${q})*(${q})*(3-2*(${q})))`;
     })[0];
     const baseX=p.fit==='contain'&&!p.box?'(W-w)/2':p.box?String(p.box.x):'0';
-    const pos=slide?`:x='${baseX}+${slide}':y=${p.box?p.box.y:p.fit==='contain'?`'(H-h)/2'`:'0'}`
+    const pinned=p.track?trackOverlay(p.track,`(t+${num(c0/fps)}-${num(p.start)})`,W,H):null;
+    const pos=pinned?`:x='(W-w)/2+${pinned.x}':y='(H-h)/2+${pinned.y}'`:slide?`:x='${baseX}+${slide}':y=${p.box?p.box.y:p.fit==='contain'?`'(H-h)/2'`:'0'}`
       :p.box?`:x=${p.box.x}:y=${p.box.y}`:p.fit==='contain'?`:x='(W-w)/2':y='(H-h)/2'`:'';
     graph.push(`[${last}][p${n}]overlay=eof_action=pass${pos}[o${n}]`);
     last=`o${n}`;

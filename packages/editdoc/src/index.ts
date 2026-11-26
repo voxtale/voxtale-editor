@@ -21,6 +21,7 @@ export * from "./segments";
 export * from "./clip-index";
 export * from "./create";
 export * from "./render";
+export * from "./motion";
 
 /** Major of this package; desktop and cloud refuse to talk across majors. */
 export const PACKAGE_MAJOR = 0;

@@ -14,7 +14,7 @@ import type {ClipMoments,ClipSync} from '../../moments';
 import {applyMulticam,type Multicam} from './multicam';
 import {
   FADE_MAX,STYLE_PRESETS,buildCaptions,newEditDoc,outputTimes,packSequence,parseEditDoc,FPS_30,snap,snapDown,snapUp,transitionLength,
-  type ARollItem,type Fps,type Grade,type TransitionKind,type ZoomCurve,type ZoomItem,type BRollItem,type ClipIndex,type ClipRef,type EditDoc,type EditStyle,type GraphicItem,type PipCorner,type SourceWord,type TextItem,type WordFix,
+  type ARollItem,type Fps,type Grade,type TransitionKind,type ZoomCurve,type ZoomItem,type BRollItem,type ClipIndex,type ClipRef,type EditDoc,type EditStyle,type GraphicItem,type PipCorner,type SourceWord,type TextItem,type WordFix,type MotionTrack,type Reframe,canvasFor,parseAspect,trackStale,
 } from '@voxtale/editdoc';
 
 import type {StyleUse} from '../styles/use';
@@ -141,6 +141,12 @@ export interface Overlays {wordFixes?:WordFix[];graphics?:GraphicPlacement[];cap
   eyesAt?:EyesAt;
   /** The brand logo (place_logo): its image clip and where and when it shows. */
   logo?:{ref:ClipRef;items:LogoPlacement[]};
+  /** Output frame shape (set_frame): "9:16", "1:1"...; absent = the main clip's shape. */
+  frame?:{aspect:string};
+  /** Auto reframe path per clip id (set_frame): the crop follows the speaker. */
+  reframes?:Record<string,Reframe>;
+  /** Motion tracks by text or graphic item id (track_title); one the cut moved off its footage is left off. */
+  motionTracks?:Record<string,MotionTrack>;
   /**
    * Where a word is heard to start ('in') or end ('out'), from the clip's sound; never past `limit`.
    * `other` is the word's other end: with it the edge may move inward, off a breath or a pause the
@@ -328,10 +334,10 @@ export function buildCut(job:Job,segments:Segment[],o:Overlays={}):EditDoc {
   const main=canvasClip(job,raw);
   // Library sounds the agent's hits use join the clips; grades ride on their clips.
   const lib=SFX_SOUND_IDS.filter(n=>o.sfx?.some(h=>h.clipId===libraryClip(n).id)&&!job.clips.some(c=>c.ref.id===libraryClip(n).id)).map((n:SfxSound)=>libraryClip(n));
-  const graded=(r:ClipRef):ClipRef=>{const g=o.grades?.[r.id];return {...r,...o.clipSettings?.[r.id],...(g?{grade:g}:{})};};
+  const graded=(r:ClipRef):ClipRef=>{const g=o.grades?.[r.id],rf=o.reframes?.[r.id];return {...r,...o.clipSettings?.[r.id],...(g?{grade:g}:{}),...(rf?{reframe:rf}:{})};};
   const logoRef=o.logo?.items.length&&!job.clips.some(c=>c.ref.id===o.logo!.ref.id)?[o.logo.ref]:[];
   let doc=newEditDoc({id:job.id,name:job.name,clips:[...job.clips.map(c=>graded(c.ref)),...lib,...logoRef],fps:main.fps,style:job.style,
-    canvas:{width:main.width??1920,height:main.height??1080}});
+    canvas:o.frame?canvasFor({width:main.width??1920,height:main.height??1080},parseAspect(o.frame.aspect)):{width:main.width??1920,height:main.height??1080}});
   if(o.wordFixes?.length)doc={...doc,wordFixes:o.wordFixes};
   const lay=(items:typeof raw):EditDoc=>{
     const d={...doc,tracks:{...doc.tracks,'a-roll':fitSplits(job,packSequence(items,doc.fps),doc.fps).map(fitFade)}};
@@ -382,7 +388,7 @@ export function buildCut(job:Job,segments:Segment[],o:Overlays={}):EditDoc {
   const audio=planAudio(doc,musicCues(job,doc,o.music),o.sfx&&sfxHits(job,doc,o.sfx));
   doc={...doc,tracks:{...doc.tracks,music:audio.music,sfx:audio.sfx},mix:{...doc.mix,...audio.mix}};
   if(o.logo?.items.length)doc={...doc,logos:placeLogos(job,doc,o.logo.ref,o.logo.items)};
-  return parseEditDoc(applyMulticam(doc,job,o.multicam)).doc;
+  return parseEditDoc(withMotionTracks(applyMulticam(doc,job,o.multicam),o.motionTracks)).doc;
 }
 
 /**
@@ -734,3 +740,13 @@ export function checkCut(job:Job,doc:EditDoc,segments:Segment[],graphicCount=0,e
 }
 
 export const styleOf=(id:string|undefined):EditStyle=>STYLE_PRESETS[(id??'calm-explainer') as keyof typeof STYLE_PRESETS]??STYLE_PRESETS['calm-explainer'];
+
+/** Each text or graphic with a motion track takes it, unless the cut moved the footage under it (trackStale). */
+export function withMotionTracks(doc:EditDoc,tracks:Record<string,MotionTrack>|undefined):EditDoc {
+  if(!tracks||!Object.keys(tracks).length)return doc;
+  const on=<T extends {id:string;start:number;track?:MotionTrack|undefined}>(i:T):T=>{
+    const tr=tracks[i.id];
+    return tr&&!trackStale(doc,{...i,track:tr})?{...i,track:tr}:i;
+  };
+  return {...doc,tracks:{...doc.tracks,text:doc.tracks.text.map(on),graphics:doc.tracks.graphics.map(on)}};
+}

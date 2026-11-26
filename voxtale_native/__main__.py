@@ -7,6 +7,10 @@ writes {faces: [...]} (largest face per still, or null) on stdout.
 ``subject`` reads {video, out, start, end, fps} and writes a subject mask
 video to ``out`` (voxtale_native/subject.py); ``subject_still`` reads
 {image, out} and writes one still's mask as a PNG.
+``subject_path`` reads {video, start, end, rate?, people?} and writes the
+speaker's place per sampled frame (auto reframe); ``track_point`` reads
+{video, start, end, at, point, zone?} and writes a set point's path (title
+motion tracking). See track.py.
 """
 
 from __future__ import annotations
@@ -40,7 +44,19 @@ def _subject_still(req: dict) -> dict:
     return subject_mask_still(req["image"], req["out"])
 
 
-OPS = {"faces": _faces, "analyse": _analyse, "subject": _subject, "subject_still": _subject_still}
+def _subject_path(req: dict) -> dict:
+    from voxtale_native.track import subject_path
+
+    return subject_path(req["video"], float(req["start"]), float(req["end"]), float(req.get("rate", 5)), bool(req.get("people", True)))
+
+
+def _track_point(req: dict) -> dict:
+    from voxtale_native.track import track_point
+
+    return track_point(req["video"], float(req["start"]), float(req["end"]), float(req["at"]), req["point"], req.get("zone"))
+
+
+OPS = {"faces": _faces, "analyse": _analyse, "subject": _subject, "subject_still": _subject_still, "subject_path": _subject_path, "track_point": _track_point}
 
 
 def main(argv: list[str]) -> int:

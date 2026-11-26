@@ -5,14 +5,15 @@
 // groups (cameras and mics recorded together), a piece's angle, mic and
 // split / picture-in-picture layout, a clip's sound offset and its colour
 // space (log, HDR, input LUT), and a graphic's behindSubject (text behind
-// the speaker), all optional (`upgradeEditDoc` lifts v2-v5).
+// the speaker), all optional (`upgradeEditDoc` lifts v2-v5). v7 added
+// logos; v8 a clip's auto-reframe path and a text or graphic's motion track.
 // Pure zod; no I/O. Times are seconds, frame-snapped by `validateEditDoc`.
 import { z } from "zod";
 import { fpsSchema } from "./time";
 import { cssColor, editStyleSchema, fontWeight } from "./style";
 import { gradeSchema } from "./grade";
 
-export const EDITDOC_VERSION = 7 as const;
+export const EDITDOC_VERSION = 8 as const;
 
 const id = z.string().regex(/^[A-Za-z0-9_.:~-]{1,120}$/); // "~" marks suggestion ids ("a1~r4")
 const time = z.number().finite().nonnegative();
@@ -61,6 +62,47 @@ export const clipColorSchema = z.object({
 }).strict();
 export type ClipColor = z.infer<typeof clipColorSchema>;
 
+export const REFRAME_SPEEDS = ["slower", "default", "faster"] as const;
+export type ReframeSpeed = (typeof REFRAME_SPEEDS)[number];
+/**
+ * Auto reframe (v8): where the speaker is across the clip, smoothed, so a
+ * canvas narrower than the clip crops around them instead of the middle.
+ * `t` is seconds into the clip, `x` the centre the crop aims at as a fraction
+ * of the clip's width; straight lines between keys. Kept by source time, so
+ * it holds through every recut and any canvas shape: the render clamps the
+ * crop inside the frame.
+ */
+export const reframeSchema = z.object({
+  speed: z.enum(REFRAME_SPEEDS).default("default"),
+  keys: z.array(z.object({ t: z.number().finite().nonnegative(), x: z.number().min(0).max(1) }).strict()).min(1).max(20000),
+}).strict();
+export type Reframe = z.infer<typeof reframeSchema>;
+
+/**
+ * Motion track (v8, After Effects' Track Motion): a text or graphic pinned to
+ * a spot of the set follows it as the camera moves. `keys.t` is seconds from
+ * the item's start; dx, dy how far the spot has moved from the anchor
+ * (fractions of the canvas), s its scale against the anchor. Straight lines
+ * between keys; before the first and after the last the end key holds.
+ * clipId/at: the clip under it and the source second of the anchor, shown
+ * `anchor` seconds from the item's start, so a recut that moves the footage
+ * under the item can tell the track is stale. point: the pinned spot on the
+ * canvas at the anchor (fractions).
+ */
+export const motionTrackSchema = z.object({
+  clipId: id,
+  at: z.number().finite().nonnegative(),
+  anchor: z.number().finite().nonnegative(),
+  point: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict(),
+  keys: z.array(z.object({
+    t: z.number().finite().nonnegative(),
+    dx: z.number().min(-4).max(4),
+    dy: z.number().min(-4).max(4),
+    s: z.number().min(0.1).max(10).optional(),
+  }).strict()).min(1).max(20000),
+}).strict();
+export type MotionTrack = z.infer<typeof motionTrackSchema>;
+
 export const clipRefSchema = z.object({
   id,
   hash,                                   // sha256 of the original bytes
@@ -97,6 +139,8 @@ export const clipRefSchema = z.object({
   colorSpace: z.string().trim().min(1).max(80).optional(),
   /** A .cube (path on this machine) applied before the grade instead of the built-in conversion. */
   inputLut: z.string().trim().min(1).max(1000).optional(),
+  /** Auto reframe path (v8): the crop follows the speaker when the canvas is narrower than the clip. */
+  reframe: reframeSchema.optional(),
 }).strict();
 export type ClipRef = z.infer<typeof clipRefSchema>;
 
@@ -242,6 +286,8 @@ export const textItemSchema = z.object({
     color: cssColor.optional(),
     backgroundColor: z.union([cssColor, z.literal("none")]).optional(),
   }).strict().optional(),
+  /** Pinned to a spot of the set: follows it as the camera moves (v8). */
+  track: motionTrackSchema.optional(),
   ...pictureFade,
 }).strict();
 export const graphicItemSchema = z.object({
@@ -257,6 +303,8 @@ export const graphicItemSchema = z.object({
   }).strict()).max(VARIANTS_MAX).optional(),
   /** Drawn behind the speaker: the a-roll's subject (a person mask) goes back on top. Without a mask, drawn over as usual. */
   behindSubject: z.boolean().optional(),
+  /** Pinned to a spot of the set: follows it as the camera moves (v8). */
+  track: motionTrackSchema.optional(),
   ...pictureFade,
 }).strict();
 export const musicItemSchema = z.object({
@@ -559,12 +607,13 @@ function liftZoom(item: Raw, keys: V2Key[]): Raw | undefined {
  * new field is optional, so only the number changes. Anything else passes
  * through for the schema to judge. v4 → v5, v5 → v6 and v6 → v7: new fields
  * are optional (groups, angles, avOffset, graphics behindSubject; v7 logos).
+ * v7 → v8: a clip's reframe and an item's track are optional too.
  */
 export function upgradeEditDoc(input: unknown): unknown {
   const doc = input as Raw | null;
   if (!doc || typeof doc !== "object") return input;
   if (doc.version === 2) return upgradeEditDoc(upgradeV2(doc));
-  if (doc.version === 3 || doc.version === 4 || doc.version === 5 || doc.version === 6) return { ...doc, version: EDITDOC_VERSION };
+  if (doc.version === 3 || doc.version === 4 || doc.version === 5 || doc.version === 6 || doc.version === 7) return { ...doc, version: EDITDOC_VERSION };
   return input;
 }
 

@@ -70,3 +70,16 @@ export async function nativeSubjectStill(image: string, out: string, warn: (why:
     return false;
   }
 }
+
+/** Subject path rows from voxtale_native/track.py: [t, cx, cy, w, h, kind], nulls when nobody is seen. */
+export type NativeSubjectRow=[number,number|null,number|null,number|null,number|null,'face'|'person'|null];
+
+/** Where the speaker is over source seconds [start, end] of `video`, sampled `rate` times a second (YuNet faces, HOG people when no face). */
+export async function nativeSubjectPath(o:{video:string;start:number;end:number;rate?:number;people?:boolean}):Promise<{frames:NativeSubjectRow[];faces:number;people:number}> {
+  return callNative('subject_path',o);
+}
+
+/** A set point followed over source seconds [start, end] of `video`, anchored at `at` (OpenCV Lucas-Kanade + RANSAC similarity). Rows: [t, x, y, scale, rotation]. */
+export async function nativeTrackPoint(o:{video:string;start:number;end:number;at:number;point:[number,number];zone?:[number,number,number,number]}):Promise<{at:number;frames:[number,number,number,number,number][]}> {
+  return callNative('track_point',o);
+}
