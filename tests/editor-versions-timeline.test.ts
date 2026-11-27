@@ -164,7 +164,7 @@ describe('edit versions',()=>{
 
 describe('server versions for an agent that forgets new_version',()=>{
   process.env.VOXTALE_EDITOR_UV='/nonexistent/uv';   // no face finder: nothing spawns
-  const natives=Promise.resolve({python:false,faceModel:false,subjectModel:false,missing:[]});
+  const natives=Promise.resolve({python:false,faceModel:false,subjectModel:false,objectModel:false,missing:[],transcriber:{model:{backend:'onnx' as const,dir:'',missing:[],ready:false},engine:'none' as const},optional:[]});
   const project=async()=>{
     const folder=await scratch();
     await mkdir(join(folder,'.edit'),{recursive:true});

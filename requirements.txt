@@ -2,3 +2,5 @@ opencv-python-headless
 numpy
 scipy
 onnxruntime
+parakeet-mlx==0.7.0; sys_platform == "darwin" and platform_machine == "arm64"
+sherpa-onnx==2.0.3

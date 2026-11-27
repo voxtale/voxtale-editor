@@ -6,7 +6,9 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {fileHash,locked,maybeJson,readJson,writeJson} from './artifacts';
 import {probe,run} from './media';
 import type {Edit} from './model';
-import {transcriptSchema,normalizeTranscript,type Transcript} from './transcript-model';
+import {transcriptSchema,normalizeTranscript,normalizeLocalTranscript,type Transcript} from './transcript-model';
+import {chooseEngine,transcribeLocal,type EngineChoice,type LocalModel,type LocalOptions} from './local-transcribe';
+export {chooseEngine,ENGINE_LABEL,MissingModelError,missingModelMessage,localModel,FETCH_SCRIPT} from './local-transcribe';
 export * from './transcript-model';
 export async function loadTranscript(path:string,edit:Edit) {
   const t=transcriptSchema.parse(await readJson(path));
@@ -14,13 +16,21 @@ export async function loadTranscript(path:string,edit:Edit) {
   return t;
 }
 type Fetch=(url:string,init?:RequestInit)=>Promise<Response>;
-type TranscribeOptions={progress?:(message:string)=>void;fetch?:Fetch;pollMs?:number;timeoutMs?:number;transcriptId?:string};
+export type TranscribeOptions={progress?:(message:string)=>void;fetch?:Fetch;pollMs?:number;timeoutMs?:number;transcriptId?:string;
+  /** local | assemblyai | auto; default VOXTALE_EDITOR_TRANSCRIBE, else auto (local when its model is on disk). */
+  engine?:string;
+  /** Local engine pieces and the engine itself (tests inject a stub). */
+  local?:Omit<LocalOptions,'progress'>;
+  /** The local model state (tests inject one); default models/parakeet/ in the repo. */
+  model?:LocalModel};
+/** The engine a transcribe call with these options would use (throws MissingModelError like it). For tool output before a long run. */
+export const transcribeEngine=(options:TranscribeOptions={}):EngineChoice=>chooseEngine({...(options.engine?{requested:options.engine}:{}),...(options.model?{model:options.model}:{}),injectedFetch:!!options.fetch||!!options.transcriptId});
 export async function transcribe(edit:Edit,output:string,options:TranscribeOptions={}) {
   const sourceHash=await fileHash(edit.source);
-  return assembly(resolve(output),edit.source,sourceHash,async()=>{
+  return transcribeWith(resolve(output),edit.source,sourceHash,async()=>{
     const info=await probe(edit.source);
     if(!info.video||!info.audio)throw new Error('Transcription requires video footage with an audio track');
-    return {duration:info.duration,audio:async(scratch:string)=>{
+    return {duration:info.duration,input:edit.source,audio:async(scratch:string)=>{
       const audio=join(scratch,'audio.flac');
       options.progress?.('Extracting audio for AssemblyAI');
       await run(ffmpegPath(),['-v','error','-nostdin','-y','-i',edit.source,'-vn','-ac','1','-ar','16000','-c:a','flac',audio]);
@@ -28,15 +38,34 @@ export async function transcribe(edit:Edit,output:string,options:TranscribeOptio
     }};
   },options);
 }
-/** Transcribe audio already extracted elsewhere (desktop ingest uploads mono 16 kHz FLAC). */
+/**
+ * Transcribe audio already extracted elsewhere (desktop ingest, a sequence's
+ * joined passages, a live piece): any file ffmpeg reads. The one call for
+ * every caller; the engine follows transcribeEngine(options).
+ */
 export async function transcribeAudio(audio:string,output:string,source:{name:string;hash:string;duration:number},options:TranscribeOptions={}) {
-  return assembly(resolve(output),source.name,source.hash,async()=>({duration:source.duration,audio:async()=>audio}),options);
+  return transcribeWith(resolve(output),source.name,source.hash,async()=>({duration:source.duration,input:audio,audio:async()=>audio}),options);
 }
-async function assembly(output:string,source:string,sourceHash:string,prepare:()=>Promise<{duration:number;audio:(scratch:string)=>Promise<string>}>,options:TranscribeOptions) {
+type Prepared={duration:number;input:string;audio:(scratch:string)=>Promise<string>};
+async function transcribeWith(output:string,source:string,sourceHash:string,prepare:()=>Promise<Prepared>,options:TranscribeOptions) {
   return locked(`${output}.lock`,async()=>{
     const cached=await maybeJson(output);
-    if(cached) {const t=transcriptSchema.parse(cached);if(t.sourceHash!==sourceHash)throw new Error('Existing transcript is for different footage');options.progress?.('Using saved transcript');return t;}
+    if(cached) {const t=transcriptSchema.parse(cached);if(t.sourceHash!==sourceHash)throw new Error('Existing transcript is for different footage');options.progress?.(`Using saved transcript (${t.provider})`);return t;}
+    // A half-done AssemblyAI job resumes on AssemblyAI, whatever the default: it is paid for already.
+    const pending=await maybeJson(`${output}.state.json`);
+    const choice=pending?.id?chooseEngine({requested:'assemblyai'}):transcribeEngine(options);
     const info=await prepare();
+    options.progress?.(`Engine: ${choice.label} (${choice.why})`);
+    if(choice.engine==='local') {
+      const raw=await transcribeLocal(info.input,info.duration,{...options.local,...(options.progress?{progress:options.progress}:{})});
+      const t=normalizeLocalTranscript(raw,source,sourceHash,info.duration);
+      await writeJson(output,t);return t;
+    }
+    return assembly(output,source,sourceHash,info,options);
+  });
+}
+async function assembly(output:string,source:string,sourceHash:string,info:Prepared,options:TranscribeOptions) {
+  {
     const key=process.env.ASSEMBLYAI_API_KEY;if(!key)throw new Error('Set ASSEMBLYAI_API_KEY for transcription');
     const base=process.env.ASSEMBLYAI_REGION==='eu'?'https://api.eu.assemblyai.com/v2':'https://api.assemblyai.com/v2';
     const request=options.fetch??fetch;
@@ -77,5 +106,5 @@ async function assembly(output:string,source:string,sourceHash:string,prepare:()
       await sleep(options.pollMs??3000);
     }
     throw new Error('Transcription still running. Repeat the command to resume the saved job.');
-  });
+  }
 }

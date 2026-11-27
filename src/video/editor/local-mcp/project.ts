@@ -103,6 +103,7 @@ async function loudness(path:string):Promise<{lufs:number;truePeakDb:number}|und
 /**
  * True when transcription failed only because the clip has no speech: no
  * sound track, an empty transcript, or AssemblyAI finding no spoken audio.
+ * A missing local model is not "no speech": it fails the open with its fix.
  */
 export function noSpeech(e:unknown):boolean {
   const issues=(e as {name?:string;issues?:{path:PropertyKey[];code:string}[]})?.name==='ZodError'?(e as {issues:{path:PropertyKey[];code:string}[]}).issues:undefined;
@@ -126,7 +127,8 @@ async function loadClip(a:At,id:string,path:string,role:Role,log:Log,o:{proxy?:b
   let words:JobClip['words']=[];
   if(role==='a-roll') {
     if(info.audio) {
-      log(`transcribing ${basename(path)} (AssemblyAI)…`);
+      // The engine line (local Parakeet or AssemblyAI) follows as progress, after the saved-transcript check.
+      log(`transcribing ${basename(path)}…`);
       try {
         const t=await transcribe({source:path} as unknown as Edit,join(a.dir,'transcripts',`${hash.slice(0,12)}.json`),{progress:m=>log(`  ${m}`)});
         words=t.words.map(w=>({id:w.id,text:w.text,start:w.start,end:w.end}));

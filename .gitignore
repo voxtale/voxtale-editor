@@ -23,3 +23,5 @@ models/luts/
 # MobileSAM ONNX for object picks: tools/fetch-object-model.sh (44 MB, not committed)
 models/mobile_sam_image_encoder.onnx
 models/sam_mask_decoder_single.onnx
+# Parakeet transcription model: tools/fetch-parakeet.sh (CC-BY-4.0, 0.5-2.5 GB; not committed)
+models/parakeet/

@@ -14,6 +14,9 @@ motion tracking). See track.py.
 ``objects`` reads {video, out, start, end, fps, objects, subject} and writes the subject mask with picked objects
 added or cut out (voxtale_native/objects.py); ``objects_still`` reads {image, out, objects, subject, overlay} and
 writes one still's mask, plus an overlay the agent looks at to check its pick.
+``asr`` reads {wav, models?} (16 kHz mono WAV) and writes {engine, model,
+words} with local Parakeet (voxtale_native/asr.py); {check: true} reports
+the model state instead.
 """
 
 from __future__ import annotations
@@ -72,8 +75,15 @@ def _objects_still(req: dict) -> dict:
     return objects_still(req["image"], req["out"], list(req.get("objects") or []), bool(req.get("subject", False)), req.get("overlay"))
 
 
+def _asr(req: dict) -> dict:
+    from voxtale_native.asr import handle
+
+    return handle(req)
+
+
 OPS = {"faces": _faces, "analyse": _analyse, "subject": _subject, "subject_still": _subject_still,
-       "subject_path": _subject_path, "track_point": _track_point, "objects": _objects, "objects_still": _objects_still}
+       "subject_path": _subject_path, "track_point": _track_point, "objects": _objects, "objects_still": _objects_still,
+       "asr": _asr}
 
 
 def main(argv: list[str]) -> int:

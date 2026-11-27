@@ -7,6 +7,7 @@ import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {spawnText} from '../spawn';
 import {PYTHON,REPO_ROOT} from './bridge';
+import {chooseEngine,FETCH_SCRIPT,localModel,type LocalModel} from '../video/local-transcribe';
 
 export const FACE_MODEL='face_detection_yunet_2023mar.onnx';
 export const SUBJECT_MODEL='u2netp.onnx';
@@ -31,9 +32,15 @@ export interface NativeCheck {
   pixelFont?:boolean;
   /** One line per missing piece, with what it costs; empty when all is there. */
   missing:string[];
+  /** The local transcription model and the engine `open` would use. */
+  transcriber:{model:LocalModel;engine:'local'|'assemblyai'|'none'};
+  /** Reported, never failing setup: the local transcription model is a separate, large fetch. */
+  optional:string[];
 }
 
 export interface CheckOptions {root?:string;python?:string;fontsDir?:string;
+  /** Local model state (tests inject one); default checks models/parakeet/ under root. */
+  transcriber?:LocalModel;env?:Record<string,string|undefined>;
   /** Runs the interpreter; true when `import cv2, numpy` works. Injected in tests. */
   probe?:(python:string,root:string)=>Promise<boolean>;}
 
@@ -50,11 +57,25 @@ export async function checkNatives(o:CheckOptions={}):Promise<NativeCheck> {
   if(!faceModel)missing.push(`models/${FACE_MODEL}: no face finder (zooms aim at the middle)`);
   if(!subjectModel)missing.push(`models/${SUBJECT_MODEL}: no subject mask (text goes over the speaker, not behind)`);
   if(pixelFont===false)missing.push(`fonts/${PIXEL_FONT}: pixel-art graphics fall back to Inter`);
-  return {python:ok,faceModel,subjectModel,objectModel:objectModel(root),...(pixelFont!==undefined?{pixelFont}:{}),missing};
+  const model=o.transcriber??localModel({root,...(o.env?{env:o.env}:{})});
+  let engine:NativeCheck['transcriber']['engine']='none';
+  const optional:string[]=[];
+  try {engine=chooseEngine({model,...(o.env?{env:o.env}:{})}).engine;}
+  catch {optional.push(`Parakeet transcription model (${model.backend}) in ${model.dir}: talk clips cannot be transcribed. Run ${FETCH_SCRIPT} (free, ${model.backend==='mlx'?'2.5 GB':'490 MB'}), or set VOXTALE_EDITOR_TRANSCRIBE=assemblyai (paid)`);}
+  return {python:ok,faceModel,subjectModel,objectModel:objectModel(root),...(pixelFont!==undefined?{pixelFont}:{}),missing,transcriber:{model,engine},optional};
 }
 
 /** The warning the server prints and hands the agent; empty when nothing is missing. */
-export function missingNote(c:NativeCheck):string {
-  return c.missing.length?`Missing on this machine (fix: run \`bun run setup\` in the editor repo, then restart the server):\n- ${c.missing.join('\n- ')}`:'';
+export function missingNote(c:Pick<NativeCheck,'missing'>&Partial<Pick<NativeCheck,'optional'>>):string {
+  const parts=[];
+  if(c.missing.length)parts.push(`Missing on this machine (fix: run \`bun run setup\` in the editor repo, then restart the server):\n- ${c.missing.join('\n- ')}`);
+  if(c.optional?.length)parts.push(`Not fetched yet:\n- ${c.optional.join('\n- ')}`);
+  return parts.join('\n');
 }
+
+/** One line on the transcription engine, for setup and the start check. */
+export const transcriberLine=(c:Pick<NativeCheck,'transcriber'>)=>
+  c.transcriber.engine==='local'?`transcription: local Parakeet v3 (${c.transcriber.model.backend}, free)`
+  :c.transcriber.engine==='assemblyai'?'transcription: AssemblyAI (paid, VOXTALE_EDITOR_TRANSCRIBE=assemblyai)'
+  :`transcription: no engine (run ${FETCH_SCRIPT})`;
 
