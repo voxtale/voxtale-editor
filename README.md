@@ -24,6 +24,8 @@ Optional, once: `tools/fetch-parakeet.sh` (free local transcription, used
 when `ASSEMBLYAI_API_KEY` is not set), `tools/fetch-object-model.sh`
 (object picks), and `brew install yt-dlp` for `download` and live URLs.
 
+Settings and keys: copy [.env.example](.env.example) to `.env` (all optional).
+
 Connecting Claude Code, Codex and Cursor, stdio, tokens and keys:
 [apps/editor-mcp/README.md](apps/editor-mcp/README.md).
 Staged CLI workflow: [docs/usage.md](docs/usage.md).

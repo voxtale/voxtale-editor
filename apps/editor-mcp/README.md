@@ -101,6 +101,8 @@ reused whatever the engine.
 
 ### Keys
 
+Every setting, with defaults: [.env.example](../../.env.example) (copy to `.env`; no key is required).
+
 For AssemblyAI only: put `ASSEMBLYAI_API_KEY=…` in `.env` in the repo
 folder (bun loads it), or pass it with `-e` on a stdio client line. Once set,
 it is the engine; `VOXTALE_EDITOR_TRANSCRIBE=local` keeps transcription local.
