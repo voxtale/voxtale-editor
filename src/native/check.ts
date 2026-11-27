@@ -61,7 +61,7 @@ export async function checkNatives(o:CheckOptions={}):Promise<NativeCheck> {
   let engine:NativeCheck['transcriber']['engine']='none';
   const optional:string[]=[];
   try {engine=chooseEngine({model,...(o.env?{env:o.env}:{})}).engine;}
-  catch {optional.push(`Parakeet transcription model (${model.backend}) in ${model.dir}: talk clips cannot be transcribed. Run ${FETCH_SCRIPT} (free, ${model.backend==='mlx'?'2.5 GB':'490 MB'}), or set VOXTALE_EDITOR_TRANSCRIBE=assemblyai (paid)`);}
+  catch {optional.push(`Parakeet transcription model (${model.backend}) in ${model.dir}: talk clips cannot be transcribed. Run ${FETCH_SCRIPT} (free, ${model.backend==='mlx'?'2.5 GB':'490 MB'}), or set ASSEMBLYAI_API_KEY (paid)`);}
   return {python:ok,faceModel,subjectModel,objectModel:objectModel(root),...(pixelFont!==undefined?{pixelFont}:{}),missing,transcriber:{model,engine},optional};
 }
 
@@ -76,6 +76,6 @@ export function missingNote(c:Pick<NativeCheck,'missing'>&Partial<Pick<NativeChe
 /** One line on the transcription engine, for setup and the start check. */
 export const transcriberLine=(c:Pick<NativeCheck,'transcriber'>)=>
   c.transcriber.engine==='local'?`transcription: local Parakeet v3 (${c.transcriber.model.backend}, free)`
-  :c.transcriber.engine==='assemblyai'?'transcription: AssemblyAI (paid, VOXTALE_EDITOR_TRANSCRIBE=assemblyai)'
-  :`transcription: no engine (run ${FETCH_SCRIPT})`;
+  :c.transcriber.engine==='assemblyai'?'transcription: AssemblyAI (paid; ASSEMBLYAI_API_KEY set or VOXTALE_EDITOR_TRANSCRIBE=assemblyai)'
+  :`transcription: no engine (run ${FETCH_SCRIPT}, or set ASSEMBLYAI_API_KEY)`;
 

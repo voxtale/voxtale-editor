@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {chooseEngine,localModel,mergePass,MissingModelError,spans,stitch,transcribeLocal,type LocalEngine,type LocalModel,type RawWord} from '../src/video/local-transcribe';
 import {transcribeAudio} from '../src/video/transcript';
+import {checkNatives,transcriberLine} from '../src/native/check';
 import {normalizeLocalTranscript,transcriptSchema} from '../src/video/transcript-model';
 
 const w=(text:string,start:number,end:number,confidence=0.9):RawWord=>({text,start,end,confidence});
@@ -39,22 +40,40 @@ describe('stitch',()=>{
 });
 
 describe('engine choice',()=>{
-  test('auto: local when the model is there',()=>{
+  test('auto, no key: local when the model is there',()=>{
     expect(chooseEngine({model:READY,env:{}})).toMatchObject({engine:'local',label:expect.stringContaining('free')});
+    expect(chooseEngine({model:READY,env:{ASSEMBLYAI_API_KEY:'  '}}).engine).toBe('local');
   });
-  test('auto with no model: an error naming the fetch script and the paid switch, never a silent paid run',()=>{
-    let e:unknown;try{chooseEngine({model:GONE,env:{ASSEMBLYAI_API_KEY:'k'}});}catch(x){e=x;}
+  test('auto with a key: AssemblyAI, model or not',()=>{
+    expect(chooseEngine({model:READY,env:{ASSEMBLYAI_API_KEY:'k'}})).toMatchObject({engine:'assemblyai',why:'ASSEMBLYAI_API_KEY is set'});
+    expect(chooseEngine({model:GONE,env:{ASSEMBLYAI_API_KEY:'k',VOXTALE_EDITOR_TRANSCRIBE:'auto'}}).engine).toBe('assemblyai');
+  });
+  test('auto, no key, no model: an error naming the fetch script and the key',()=>{
+    let e:unknown;try{chooseEngine({model:GONE,env:{}});}catch(x){e=x;}
     expect(e).toBeInstanceOf(MissingModelError);
     expect((e as Error).message).toContain('tools/fetch-parakeet.sh');
-    expect((e as Error).message).toContain('VOXTALE_EDITOR_TRANSCRIBE=assemblyai');
-    expect(()=>chooseEngine({model:GONE,env:{VOXTALE_EDITOR_TRANSCRIBE:'local'}})).toThrow(MissingModelError);
+    expect((e as Error).message).toContain('ASSEMBLYAI_API_KEY');
   });
-  test('assemblyai only when asked for, or when a client is passed in',()=>{
+  test('local forces local, key or not; no model is an error that says to drop it',()=>{
+    expect(chooseEngine({model:READY,env:{ASSEMBLYAI_API_KEY:'k',VOXTALE_EDITOR_TRANSCRIBE:'local'}}).engine).toBe('local');
+    expect(()=>chooseEngine({model:GONE,env:{ASSEMBLYAI_API_KEY:'k',VOXTALE_EDITOR_TRANSCRIBE:'local'}})).toThrow('drop VOXTALE_EDITOR_TRANSCRIBE=local');
+  });
+  test('assemblyai forces AssemblyAI; a passed-in client picks it under auto',()=>{
     expect(chooseEngine({model:READY,env:{VOXTALE_EDITOR_TRANSCRIBE:'assemblyai'}}).engine).toBe('assemblyai');
     expect(chooseEngine({model:GONE,requested:'assemblyai',env:{}}).label).toContain('paid');
     expect(chooseEngine({model:GONE,injectedFetch:true,env:{}}).engine).toBe('assemblyai');
     expect(chooseEngine({model:READY,injectedFetch:true,env:{VOXTALE_EDITOR_TRANSCRIBE:'local'}}).engine).toBe('local');
     expect(()=>chooseEngine({model:READY,env:{VOXTALE_EDITOR_TRANSCRIBE:'whisper'}})).toThrow('local, assemblyai or auto');
+  });
+  test('setup check reports the same choice: key -> AssemblyAI, no key -> local, neither -> fetch or key',async()=>{
+    const probe=async()=>true,root='/nowhere';
+    const keyed=await checkNatives({root,probe,transcriber:GONE,env:{ASSEMBLYAI_API_KEY:'k'}});
+    expect(keyed.transcriber.engine).toBe('assemblyai');expect(keyed.optional).toEqual([]);
+    expect((await checkNatives({root,probe,transcriber:READY,env:{}})).transcriber.engine).toBe('local');
+    const none=await checkNatives({root,probe,transcriber:GONE,env:{}});
+    expect(none.transcriber.engine).toBe('none');
+    expect(transcriberLine(none)).toContain('ASSEMBLYAI_API_KEY');
+    expect(none.optional.join()).toContain('tools/fetch-parakeet.sh');
   });
   test('model per machine: MLX on Apple Silicon, ONNX elsewhere or with VOXTALE_EDITOR_ASR=cpu',()=>{
     const root='/nowhere';
@@ -101,12 +120,12 @@ describe('transcribe through the port',()=>{
 
   test('missing model: transcribeAudio fails with the fix before touching the audio',async()=>{
     const dir=await mkdtemp(join(tmpdir(),'vx-local-tx-'));
-    const saved=process.env.VOXTALE_EDITOR_TRANSCRIBE;delete process.env.VOXTALE_EDITOR_TRANSCRIBE;
+    const saved=process.env.VOXTALE_EDITOR_TRANSCRIBE,key=process.env.ASSEMBLYAI_API_KEY;delete process.env.VOXTALE_EDITOR_TRANSCRIBE;delete process.env.ASSEMBLYAI_API_KEY;
     try {
       const s=stub();
       await expect(transcribeAudio('x.flac',join(dir,'t.json'),{name:'x',hash:'b',duration:3},{model:GONE,local:s})).rejects.toThrow('tools/fetch-parakeet.sh');
       expect(s.reads).toEqual([]);
-    } finally {if(saved!==undefined)process.env.VOXTALE_EDITOR_TRANSCRIBE=saved;await rm(dir,{recursive:true,force:true});}
+    } finally {if(saved!==undefined)process.env.VOXTALE_EDITOR_TRANSCRIBE=saved;if(key!==undefined)process.env.ASSEMBLYAI_API_KEY=key;await rm(dir,{recursive:true,force:true});}
   });
 
   test('normalize: words past the end are dropped or trimmed, empty text dropped',()=>{

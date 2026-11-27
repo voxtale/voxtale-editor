@@ -17,7 +17,7 @@ export async function loadTranscript(path:string,edit:Edit) {
 }
 type Fetch=(url:string,init?:RequestInit)=>Promise<Response>;
 export type TranscribeOptions={progress?:(message:string)=>void;fetch?:Fetch;pollMs?:number;timeoutMs?:number;transcriptId?:string;
-  /** local | assemblyai | auto; default VOXTALE_EDITOR_TRANSCRIBE, else auto (local when its model is on disk). */
+  /** local | assemblyai | auto; default VOXTALE_EDITOR_TRANSCRIBE, else auto (AssemblyAI when ASSEMBLYAI_API_KEY is set, else local). */
   engine?:string;
   /** Local engine pieces and the engine itself (tests inject a stub). */
   local?:Omit<LocalOptions,'progress'>;
@@ -32,7 +32,7 @@ export async function transcribe(edit:Edit,output:string,options:TranscribeOptio
     if(!info.video||!info.audio)throw new Error('Transcription requires video footage with an audio track');
     return {duration:info.duration,input:edit.source,audio:async(scratch:string)=>{
       const audio=join(scratch,'audio.flac');
-      options.progress?.('Extracting audio for AssemblyAI');
+      options.progress?.('Extracting audio');
       await run(ffmpegPath(),['-v','error','-nostdin','-y','-i',edit.source,'-vn','-ac','1','-ar','16000','-c:a','flac',audio]);
       return audio;
     }};

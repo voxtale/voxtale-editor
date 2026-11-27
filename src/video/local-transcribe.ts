@@ -4,8 +4,8 @@
 // tools/fetch-parakeet.sh; nothing here downloads them.
 //
 // Which engine runs: VOXTALE_EDITOR_TRANSCRIBE=local|assemblyai|auto (default
-// auto: local when its model is on disk, else a clear error naming the fetch
-// script; AssemblyAI only when asked for, so nothing bills by surprise).
+// auto: AssemblyAI when ASSEMBLYAI_API_KEY is set, else local Parakeet when its
+// model is on disk, else an error naming the fetch script and the key).
 //
 // Long input goes in pieces read with a pad each side; the pieces join on word
 // midpoints, and a word read twice a little apart at a seam is kept once.
@@ -37,10 +37,13 @@ export function localModel(o:{root?:string;platform?:string;arch?:string;env?:Re
 
 const SIZE={mlx:'2.5 GB, MLX',onnx:'490 MB, ONNX int8'} as const;
 
-/** The missing-model message: names the fetch script and the paid way out. */
-export function missingModelMessage(m:Pick<LocalModel,'backend'|'dir'>):string {
-  return `Local transcription needs the Parakeet v3 model (${SIZE[m.backend]}) in ${m.dir}: run ${FETCH_SCRIPT} in the editor repo once (free download). Or set VOXTALE_EDITOR_TRANSCRIBE=assemblyai to use AssemblyAI (paid, needs ASSEMBLYAI_API_KEY).`;
+/** The missing-model message: names the fetch script and the paid way out (`forced`: VOXTALE_EDITOR_TRANSCRIBE=local blocks the key). */
+export function missingModelMessage(m:Pick<LocalModel,'backend'|'dir'>,forced=false):string {
+  const paid=forced?'Or drop VOXTALE_EDITOR_TRANSCRIBE=local and set ASSEMBLYAI_API_KEY to use AssemblyAI (paid).':'Or set ASSEMBLYAI_API_KEY to use AssemblyAI (paid).';
+  return `Local transcription needs the Parakeet v3 model (${SIZE[m.backend]}) in ${m.dir}: run ${FETCH_SCRIPT} in the editor repo once (free download). ${paid}`;
 }
+/** True when ASSEMBLYAI_API_KEY holds a value. */
+export const hasAssemblyKey=(env:Record<string,string|undefined>=process.env)=>!!env.ASSEMBLYAI_API_KEY?.trim();
 export class MissingModelError extends Error {override name='MissingModelError';}
 
 export interface EngineChoice {engine:EngineName;
@@ -50,19 +53,22 @@ export const ENGINE_LABEL:Record<EngineName,string>={local:'local Parakeet v3, f
 
 /**
  * Which engine transcribes. `requested`: the caller's pick, else
- * VOXTALE_EDITOR_TRANSCRIBE. An injected fetch means a caller (a test, a
- * resumed AssemblyAI job) wants AssemblyAI. Throws MissingModelError when
- * local is due and its model is not on disk.
+ * VOXTALE_EDITOR_TRANSCRIBE, else auto. Auto: AssemblyAI when
+ * ASSEMBLYAI_API_KEY is set or a caller injects a fetch (a test, a resumed
+ * AssemblyAI job); else local Parakeet. Throws MissingModelError when local
+ * is due and its model is not on disk.
  */
 export function chooseEngine(o:{requested?:string;model?:LocalModel;injectedFetch?:boolean;env?:Record<string,string|undefined>}={}):EngineChoice {
-  const raw=(o.requested??(o.env??process.env).VOXTALE_EDITOR_TRANSCRIBE??'auto').trim().toLowerCase()||'auto';
+  const env=o.env??process.env;
+  const raw=(o.requested??env.VOXTALE_EDITOR_TRANSCRIBE??'auto').trim().toLowerCase()||'auto';
   if(!['auto','local','assemblyai'].includes(raw))throw new Error(`VOXTALE_EDITOR_TRANSCRIBE=${raw}: use local, assemblyai or auto`);
   const pick=(engine:EngineName,why:string):EngineChoice=>({engine,label:ENGINE_LABEL[engine],why});
   if(raw==='assemblyai')return pick('assemblyai','asked for (VOXTALE_EDITOR_TRANSCRIBE=assemblyai)');
+  if(raw==='auto'&&hasAssemblyKey(env))return pick('assemblyai','ASSEMBLYAI_API_KEY is set');
   if(raw==='auto'&&o.injectedFetch)return pick('assemblyai','an AssemblyAI client was passed in');
-  const model=o.model??localModel(o.env?{env:o.env}:{});
-  if(!model.ready)throw new MissingModelError(missingModelMessage(model));
-  return pick('local',raw==='local'?'asked for (VOXTALE_EDITOR_TRANSCRIBE=local)':'model on this machine');
+  const model=o.model??localModel({env});
+  if(!model.ready)throw new MissingModelError(missingModelMessage(model,raw==='local'));
+  return pick('local',raw==='local'?'asked for (VOXTALE_EDITOR_TRANSCRIBE=local)':'no ASSEMBLYAI_API_KEY; model on this machine');
 }
 
 export interface RawWord {text:string;start:number;end:number;confidence:number}

@@ -19,8 +19,8 @@ the style; what they want in or out.
 
 1. \`open\` with every file and its role. Roles: talk, voiceover, broll,
    screen, screen_synced (a screen recorded together with the speaker),
-   music, sfx. It transcribes speech (on this machine, free, unless the
-   server is set to AssemblyAI) and lists the clips, with any that share the speaker's clock. Opening again
+   music, sfx. It transcribes speech (AssemblyAI, paid, when the server
+   has ASSEMBLYAI_API_KEY; else on this machine, free) and lists the clips, with any that share the speaker's clock. Opening again
    starts over; \`resume\` continues an edit already in the folder.
 ${labels?`
    It also labels each b-roll and screen clip with a vision model, as the
@@ -52,8 +52,8 @@ ${MISSING_NATIVES_NOTE.replace(/^- /,'   ')}
    the file paths, and rebuild the edit there. Say what did not carry over.
 6. Do not edit .edit/ files by hand. The creator may: \`resume\` reads
    what they changed and keeps it as theirs. If \`open\` fails on
-   transcription, the creator sets ASSEMBLYAI_API_KEY in the server's
-   environment.
+   transcription, the creator runs tools/fetch-parakeet.sh once or sets
+   ASSEMBLYAI_API_KEY in the server's environment.
 7. Notes from the creator ("at 1:12, cut this") come in chat, not in the
    brief: find the words heard near that time in the transcript yourself,
    then work as Creator notes says. When you hand back, answer each note in

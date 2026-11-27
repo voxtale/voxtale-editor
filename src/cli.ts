@@ -33,7 +33,7 @@ produce runs transcription → take selection → graphics → preview, with sav
 Set ASSEMBLYAI_API_KEY and OPENROUTER_API_KEY for those stages.
 --model overrides VIDEO_EDIT_MODEL; --plan uses a reviewed JSON plan without an LLM call.
 select-takes: --confidence 0.85 (default), --keep-pauses disables long-pause trimming.
-transcribe: local Parakeet by default (tools/fetch-parakeet.sh once); VOXTALE_EDITOR_TRANSCRIBE=assemblyai for AssemblyAI (paid). --transcript-id ID resumes an existing AssemblyAI job.
+transcribe: AssemblyAI (paid) when ASSEMBLYAI_API_KEY is set, else local Parakeet (tools/fetch-parakeet.sh once); VOXTALE_EDITOR_TRANSCRIBE=local|assemblyai forces one. --transcript-id ID resumes an existing AssemblyAI job.
 Requires Bun, FFmpeg/ffprobe. First render may download Remotion's browser.
 See src/video/README.md for graphics, B-roll and music.`;
 async function save(path:string,value:unknown) {

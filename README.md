@@ -25,8 +25,8 @@ bun run mcp            # http://127.0.0.1:7820/mcp; token in ~/.voxtale-editor/m
 Windows: `winget install Git.Git Oven-sh.Bun Gyan.FFmpeg astral-sh.uv`,
 then the same steps in PowerShell with `$HOME\voxtale-editor`.
 
-Optional, once: `tools/fetch-parakeet.sh` (free local transcription; else
-`VOXTALE_EDITOR_TRANSCRIBE=assemblyai`, paid), `tools/fetch-object-model.sh`
+Optional, once: `tools/fetch-parakeet.sh` (free local transcription, used
+when `ASSEMBLYAI_API_KEY` is not set), `tools/fetch-object-model.sh`
 (object picks), and `brew install yt-dlp` for `download` and live URLs.
 
 Connecting Claude Code, Codex and Cursor, stdio, tokens and keys:
@@ -69,8 +69,8 @@ bun run build:sandbox              # Remotion sandbox Docker image (optional; mi
 | `OPENROUTER_API_KEY` | Optional, recommended: footage labels at `open` (Gemini, best on video), CLI planning stages, cloud jobs; paid |
 | `VOXTALE_EDITOR_VISION` | Who labels footage: `openrouter` (default with a key) or `harness` (default without: the agent labels via `label_footage` / `save_labels`, no server model call) |
 | `VIDEO_INDEX_MODEL` | OpenRouter vision model for labels; default `google/gemini-3.8-flash` |
-| `ASSEMBLYAI_API_KEY`, `ASSEMBLYAI_REGION` | Transcription with `VOXTALE_EDITOR_TRANSCRIBE=assemblyai`; paid |
-| `VOXTALE_EDITOR_TRANSCRIBE` | Transcription engine: `auto` (default; local Parakeet when its model is there), `local`, `assemblyai` (paid) |
+| `ASSEMBLYAI_API_KEY`, `ASSEMBLYAI_REGION` | Transcription with AssemblyAI: set, it is the engine; paid |
+| `VOXTALE_EDITOR_TRANSCRIBE` | Transcription engine: `auto` (default; AssemblyAI when `ASSEMBLYAI_API_KEY` is set, else local Parakeet), `local`, `assemblyai` (paid) |
 | `VOXTALE_EDITOR_ASR` | `cpu` makes a Mac use the ONNX model instead of MLX |
 | `VOXTALE_EDITOR_ENCODER` | Video encoder: `auto` (default; VideoToolbox, NVENC, QSV, AMF or MF after a test encode, else libx264), `software`, or an ffmpeg encoder name |
 | `VOXTALE_EDITOR_VERSION_IDLE` | Seconds of quiet after which the next change keeps a version first (default 600) |

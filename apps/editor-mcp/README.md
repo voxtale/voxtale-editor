@@ -68,8 +68,9 @@ If the server fails with `Cannot find module 'voxtale-editor/mcp'`,
 
 ### Transcription
 
-Free and local by default: Parakeet v3 runs on your machine (MLX on Apple
-Silicon, ONNX on the CPU elsewhere). Fetch the model once:
+With `ASSEMBLYAI_API_KEY` set, AssemblyAI transcribes (paid). With no key,
+Parakeet v3 runs on your machine, free (MLX on Apple Silicon, ONNX on the CPU
+elsewhere). Fetch its model once:
 
 ```sh
 tools/fetch-parakeet.sh          # 2.5 GB on Apple Silicon, 490 MB elsewhere
@@ -78,11 +79,11 @@ tools/fetch-parakeet.sh --onnx   # the CPU model (also for VOXTALE_EDITOR_ASR=cp
 
 `VOXTALE_EDITOR_TRANSCRIBE` picks the engine:
 
-- `auto` (default): local when the model is there; else `open` stops and
-  names the fetch script. It never falls back to a paid engine.
-- `local`: always local.
-- `assemblyai`: AssemblyAI (assemblyai.com; about $0.01 per minute of
-  speech). Needs `ASSEMBLYAI_API_KEY`.
+- `auto` (default): AssemblyAI (assemblyai.com; about $0.01 per minute of
+  speech) when `ASSEMBLYAI_API_KEY` is set; else local Parakeet. With no
+  key and no model, `open` stops and names the fetch script and the key.
+- `local`: always local, key or not.
+- `assemblyai`: always AssemblyAI. Needs `ASSEMBLYAI_API_KEY`.
 
 `open` prints which engine ran for each talk clip. A saved transcript is
 reused whatever the engine.
@@ -101,7 +102,8 @@ reused whatever the engine.
 ### Keys
 
 For AssemblyAI only: put `ASSEMBLYAI_API_KEY=…` in `.env` in the repo
-folder (bun loads it), or pass it with `-e` on a stdio client line.
+folder (bun loads it), or pass it with `-e` on a stdio client line. Once set,
+it is the engine; `VOXTALE_EDITOR_TRANSCRIBE=local` keeps transcription local.
 
 `OPENROUTER_API_KEY` (openrouter.ai) is optional but recommended for
 video. Each b-roll and screen clip gets labels, so the agent can search
@@ -246,7 +248,7 @@ For a locked render (Docker, network off), build the sandbox image:
 
 | Variable | Use |
 |---|---|
-| `ASSEMBLYAI_API_KEY`, `ASSEMBLYAI_REGION` | Transcription; paid |
+| `ASSEMBLYAI_API_KEY`, `ASSEMBLYAI_REGION` | Transcription with AssemblyAI: set, it is the engine; paid |
 | `OPENROUTER_API_KEY` | Footage labels at `open`; optional, paid |
 | `VOXTALE_EDITOR_PORT` | HTTP port (default 7820) |
 | `VOXTALE_EDITOR_TOKEN` | HTTP bearer token (default: `~/.voxtale-editor/mcp-token`) |
@@ -259,7 +261,7 @@ For a locked render (Docker, network off), build the sandbox image:
 | `VOXTALE_EDITOR_PYTHON`, `VOXTALE_EDITOR_UV` | Python interpreter (default the repo's `.venv`) / uv binary |
 | `VOXTALE_REMOTION_IMAGE`, `VOXTALE_HF_IMAGE` | Sandbox image tags |
 | `VOXTALE_EDITOR_SKIP_SETUP=1` | Skip setup during `bun install` |
-| `VOXTALE_EDITOR_TRANSCRIBE` | Transcription engine: `auto` (default; local Parakeet when its model is there), `local`, `assemblyai` (paid) |
+| `VOXTALE_EDITOR_TRANSCRIBE` | Transcription engine: `auto` (default; AssemblyAI when `ASSEMBLYAI_API_KEY` is set, else local Parakeet), `local`, `assemblyai` (paid) |
 | `VOXTALE_EDITOR_ASR` | `cpu` makes a Mac use the ONNX model instead of MLX |
 | `VOXTALE_EDITOR_ENCODER` | Video encoder: `auto` (default; VideoToolbox, NVENC, QSV, AMF or MF after a test encode, else libx264), `software`, or an ffmpeg encoder name |
 | `VOXTALE_EDITOR_VERSION_IDLE` | Seconds of quiet after which the next change keeps a version first (default 600) |
