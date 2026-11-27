@@ -13,7 +13,8 @@ import {proposeRule} from '../rules';
 import {clipOf,gestureTime,type SfxPlacement} from './cut';
 import {ff} from './look';
 import {SFX_MAX_SECONDS,SFX_RECIPE_IDS,SFX_RECIPES,SFX_VARIANTS,makeSfx,recipeGraph,type SfxRecipe} from '../../sfx-recipes';
-import {MAKE_SFX_DESCRIPTION} from './levels-sfx-skill-text';
+import {MAKE_SFX_DESCRIPTION,TRANSCRIBE_SEQUENCE_DESCRIPTION} from './levels-sfx-skill-text';
+import {SEQUENCE_TRACKS,sequencePassages,transcribePassages,type SequenceTrack} from '../../sequence-transcript';
 import {defineTool,type ToolDef} from './port';
 import type {Workspace} from './tools';
 
@@ -74,6 +75,33 @@ function makeSfxTool(ws:Workspace) {
       ws.media![made.hash]=made.path;
       (ws.sfxPeaks??={})[id]={peak:made.peak,levelDb:made.levelDb};
       return {text:`${id}: ${made.duration.toFixed(2)}s, peak @${made.peak.toFixed(2)}s at ${made.levelDb.toFixed(1)} dB${same?' (made before)':''}. Place it with set_sfx, sound "${id}".`};
+    }});
+}
+
+/**
+ * transcribe_sequence: the passages the cut plays on chosen tracks, sent once per clip, words merged into the clip in
+ * source time (job clips persist with the project). Local only: needs the source files.
+ */
+function transcribeSequenceTool(ws:Workspace) {
+  return defineTool({name:'transcribe_sequence',description:TRANSCRIBE_SEQUENCE_DESCRIPTION,
+    input:{tracks:z.array(z.enum(SEQUENCE_TRACKS as unknown as [SequenceTrack,...SequenceTrack[]])).min(1).max(4).describe('audio tracks to transcribe'),
+      from:z.number().min(0).optional().describe('cut seconds; default the start'),
+      to:z.number().gt(0).optional().describe('cut seconds; default the end')},
+    run:async({tracks,from,to})=>{
+      if(!ws.doc)throw new Error('no cut yet: set_cut first');
+      if(from!==undefined&&to!==undefined&&to<=from)throw new Error('to must be after from');
+      const passages=sequencePassages(ws.doc,tracks,{from,to});
+      if(!passages.length)return {text:'nothing heard on those tracks in that range'};
+      const clips=[...new Set(passages.map(p=>p.clipId))].flatMap(id=>{
+        const c=ws.job.clips.find(x=>x.ref.id===id),path=c&&ws.media![c.ref.hash];
+        return c&&path?[{id,hash:c.ref.hash,path,words:c.words}]:[];
+      });
+      const missing=[...new Set(passages.map(p=>p.clipId))].filter(id=>!clips.some(c=>c.id===id));
+      const done=await transcribePassages(ff,join(ws.dir,'transcripts'),clips,passages);
+      for(const r of done)if(!r.error)ws.job.clips.find(x=>x.ref.id===r.clipId)!.words=r.words;
+      const lines=done.map(r=>r.error?`${r.clipId}: failed (${r.error})`:`${r.clipId}: ${r.seconds.toFixed(1)}s heard, ${r.added} new words`);
+      if(missing.length)lines.push(`no source file for ${missing.join(', ')}`);
+      return {text:`${lines.join('\n')}\nNew words carry new ids: read the clip again before naming them.`};
     }});
 }
 
@@ -212,7 +240,7 @@ export function soundLookTools(ws:Workspace,change:Change):ToolDef<any>[] {
   ]);
   const videoClips=()=>ws.job.clips.filter(c=>c.ref.kind!=='audio');
   return [
-    ...(ws.media?[makeSfxTool(ws)]:[]),
+    ...(ws.media?[makeSfxTool(ws),transcribeSequenceTool(ws)]:[]),
     defineTool({name:'set_sfx',description:`Replace the sound effects: each hit lands with its loudest moment on a gesture (a graphic, text card or shot coming in, a zoom, a chapter, a word) and follows it through recuts; a hit whose gesture leaves the cut goes with it. Sounds: ${SFX_SOUND_IDS.map(s=>`${s} (${SFX_SOUNDS[s]})`).join('; ')}; or an sfx clip the creator gave. level: dB under the voice at the hit's peak (default per sound, -8 to -14). Few and on purpose: one sound per kind of gesture, impacts only on the big moments, none on plain lines. Empty hits = no effects; auto:true hands placement back to code.`,
       input:{hits:z.array(z.object({on,sound:z.string().describe('a library sound or an sfx clip id'),
           level:z.number().min(-30).max(-2).optional().describe('dB under the voice at the peak'),
