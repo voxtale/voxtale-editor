@@ -121,15 +121,19 @@ describe('native check',()=>{
   test('names each missing piece and what it costs',async()=>{
     const root=await mkdtemp(join(tmpdir(),'vx-natives-')),fonts=join(root,'fonts');
     await mkdir(join(root,'models'));await mkdir(fonts);
-    const none=await checkNatives({root,python:'py',fontsDir:fonts,probe:async()=>false});
+    const none=await checkNatives({root,python:'py',fontsDir:fonts,probe:async()=>false,env:{}});
     expect(none.missing).toHaveLength(4);
     expect(missingNote(none)).toContain('bun run setup');
     expect(missingNote(none)).toContain('zooms aim at the middle');
+    // No Parakeet model: reported (names the fetch script), never in `missing`, so setup does not fail on it.
+    expect(none.transcriber.engine).toBe('none');
+    expect(missingNote(none)).toContain('tools/fetch-parakeet.sh');
     for(const f of [FACE_MODEL,SUBJECT_MODEL])await writeFile(join(root,'models',f),'x');
     await writeFile(join(fonts,PIXEL_FONT),'x');
-    const all=await checkNatives({root,python:'py',fontsDir:fonts,probe:async()=>true});
+    const all=await checkNatives({root,python:'py',fontsDir:fonts,probe:async()=>true,transcriber:{backend:'onnx',dir:join(root,'models','parakeet'),missing:[],ready:true},env:{}});
     expect(all).toMatchObject({python:true,faceModel:true,subjectModel:true,pixelFont:true,missing:[]});
     expect(missingNote(all)).toBe('');
+    expect(all.transcriber.engine).toBe('local');
   });
 
   test('the repo ships both models and the pixel font',async()=>{

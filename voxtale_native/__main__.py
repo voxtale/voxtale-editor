@@ -7,6 +7,9 @@ writes {faces: [...]} (largest face per still, or null) on stdout.
 ``subject`` reads {video, out, start, end, fps} and writes a subject mask
 video to ``out`` (voxtale_native/subject.py); ``subject_still`` reads
 {image, out} and writes one still's mask as a PNG.
+``asr`` reads {wav, models?} (16 kHz mono WAV) and writes {engine, model,
+words} with local Parakeet (voxtale_native/asr.py); {check: true} reports
+the model state instead.
 """
 
 from __future__ import annotations
@@ -40,7 +43,13 @@ def _subject_still(req: dict) -> dict:
     return subject_mask_still(req["image"], req["out"])
 
 
-OPS = {"faces": _faces, "analyse": _analyse, "subject": _subject, "subject_still": _subject_still}
+def _asr(req: dict) -> dict:
+    from voxtale_native.asr import handle
+
+    return handle(req)
+
+
+OPS = {"faces": _faces, "analyse": _analyse, "subject": _subject, "subject_still": _subject_still, "asr": _asr}
 
 
 def main(argv: list[str]) -> int:

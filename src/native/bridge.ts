@@ -43,6 +43,17 @@ export async function nativeFaceFinder(jpegs: Uint8Array[]): Promise<(NativeFace
   return faces;
 }
 
+export interface NativeAsrResult { engine: string; model: string; words: { text: string; start: number; end: number; confidence: number }[] }
+
+/**
+ * Local speech-to-text of a 16 kHz mono 16-bit WAV (voxtale_native/asr.py, Parakeet v3:
+ * MLX on Apple Silicon, sherpa-onnx elsewhere). Words in seconds from the WAV's start.
+ * Throws `no-model:` when tools/fetch-parakeet.sh has not run.
+ */
+export async function nativeAsr(wav: string, models?: string): Promise<NativeAsrResult> {
+  return callNative<NativeAsrResult>("asr", { wav, ...(models ? { models } : {}) });
+}
+
 /**
  * Subject (person) mask video for source seconds [start, end) of `video` at `fps`, written to `out`
  * (voxtale_native/subject.py, U2-Net-p through cv2.dnn). False when it cannot: no model

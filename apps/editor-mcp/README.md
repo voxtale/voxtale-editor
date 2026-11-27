@@ -66,12 +66,31 @@ If the server fails with `Cannot find module 'voxtale-editor/mcp'`,
 `bun install` did not link the workspace: delete `node_modules` and run
 `bun install` again.
 
+### Transcription
+
+Free and local by default: Parakeet v3 runs on your machine (MLX on Apple
+Silicon, ONNX on the CPU elsewhere). Fetch the model once:
+
+```sh
+tools/fetch-parakeet.sh          # 2.5 GB on Apple Silicon, 490 MB elsewhere
+tools/fetch-parakeet.sh --onnx   # the CPU model (also for VOXTALE_EDITOR_ASR=cpu on a Mac)
+```
+
+`VOXTALE_EDITOR_TRANSCRIBE` picks the engine:
+
+- `auto` (default): local when the model is there; else `open` stops and
+  names the fetch script. It never falls back to a paid engine.
+- `local`: always local.
+- `assemblyai`: AssemblyAI (assemblyai.com; about $0.01 per minute of
+  speech). Needs `ASSEMBLYAI_API_KEY`.
+
+`open` prints which engine ran for each talk clip. A saved transcript is
+reused whatever the engine.
+
 ### Keys
 
-Get an AssemblyAI key (assemblyai.com; about $0.01 per minute of speech)
-for transcription. Put it in `.env` in the repo folder
-(`ASSEMBLYAI_API_KEY=…`; bun loads it), or pass it with `-e` on a stdio
-client line.
+For AssemblyAI only: put `ASSEMBLYAI_API_KEY=…` in `.env` in the repo
+folder (bun loads it), or pass it with `-e` on a stdio client line.
 
 `OPENROUTER_API_KEY` (openrouter.ai) is optional but recommended for
 video. Each b-roll and screen clip gets labels, so the agent can search

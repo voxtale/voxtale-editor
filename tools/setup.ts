@@ -1,7 +1,8 @@
 // One-step setup for the local editor: the Python env for the face finder and
 // subject mask (.venv, with uv when present, else python3 -m venv + pip), the
 // two models in models/ (shipped in git; fetched again only if lost) and the
-// pixel font. Safe to run again: it skips what is already there.
+// pixel font. Reports the transcription model (tools/fetch-parakeet.sh) without
+// fetching it or failing. Safe to run again: it skips what is already there.
 //
 //   bun run setup            (also runs after `bun install`, with --soft)
 //   --soft  never fail: print what is missing and exit 0 (bun install must not break)
@@ -11,7 +12,7 @@ import {existsSync} from 'node:fs';
 import {mkdir,readFile,rename,rm,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {REPO_ROOT,venvPython} from '../src/native/bridge';
-import {checkNatives,missingNote,SUBJECT_MODEL} from '../src/native/check';
+import {checkNatives,missingNote,SUBJECT_MODEL,transcriberLine} from '../src/native/check';
 import {spawnText} from '../src/spawn';
 
 const soft=process.argv.includes('--soft');
@@ -71,8 +72,9 @@ for(const [name,step] of [['subject mask model',subjectModel],['Python env',pyth
 
 const c=await checkNatives({root:ROOT,python:venvPython(ROOT),fontsDir:FONTS});
 for(const e of errors)console.error(`setup: ${e}`);
-if(c.missing.length) {
-  console.error(missingNote(c));
-  if(!soft)process.exit(1);
-}
+// The transcription model is reported, never failing setup: it is a separate fetch (tools/fetch-parakeet.sh).
+const note=missingNote(c);
+if(note)console.error(note);
+say(transcriberLine(c));
+if(c.missing.length) {if(!soft)process.exit(1);}
 else say(`ready: face finder, subject mask, pixel font (${venvPython(ROOT)})`);
