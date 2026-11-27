@@ -7,6 +7,7 @@ import type {EventEmitter} from 'node:events';
 import {copyFile,mkdir,readFile,rm,stat,writeFile} from 'node:fs/promises';
 import {basename,join} from 'node:path';
 import {VOICE_STEP,packVoice,voiceFrames} from './voice';
+import {levelFrames,packLevels} from './levels';
 
 export type Ff=(args:string[])=>Promise<void>;
 
@@ -85,6 +86,8 @@ export interface FrameHost {
   audio?(clip:string,start:number,end:number):Promise<Uint8Array>;
   /** The whole clip's voice track: level and pitch every VOICE_STEP, packed (see unpackVoice). */
   voice?(clip:string):Promise<Uint8Array>;
+  /** The whole clip's sound level every LEVEL_STEP, one byte a step (see unpackLevels). Where to cut: the quiet spots. */
+  levels?(clip:string):Promise<Uint8Array>;
 }
 
 /** Sample rate of `audio`: enough for a voice's loudness and pitch. */
@@ -120,6 +123,25 @@ export function localFrames(o:{sources:Record<string,string>;dir:string;html?:Ht
     return f;
   };
   const scratch=async(name:string)=>{const d=join(o.dir,`${name}-${++n}`);await mkdir(d,{recursive:true});return d;};
+  /** The clip's whole sound, read in pieces so a long clip never sits in memory whole; `extra` seconds past each piece's end. */
+  const inChunks=async(dir:string,clip:string,extra:number,pack:(samples:Float32Array)=>Uint8Array)=>{
+    const parts:Uint8Array[]=[];
+    for(let k=0;;k++) {
+      const out=join(dir,`${k}.f32`);
+      const read=ff(['-ss',String(k*VOICE_CHUNK),'-t',String(VOICE_CHUNK+extra),'-i',file(clip),'-vn','-ac','1','-ar',String(AUDIO_RATE),'-f','f32le','-c:a','pcm_f32le',out]);
+      // Past the end of the sound there is nothing to read.
+      if(k)try {await read;} catch {break;} else await read;
+      const buf=await readFile(out).catch(()=>Buffer.alloc(0));
+      await rm(out,{force:true});
+      const samples=new Float32Array(buf.buffer.slice(buf.byteOffset,buf.byteOffset+Math.floor(buf.byteLength/4)*4));
+      parts.push(pack(samples));
+      if(samples.length<VOICE_CHUNK*AUDIO_RATE)break;
+    }
+    const all=new Uint8Array(parts.reduce((s,p)=>s+p.length,0));
+    let at=0;
+    for(const p of parts){all.set(p,at);at+=p.length;}
+    return all;
+  };
   return {
     async filmstrip(clip,start,end) {
       // First cell is the frame at start, last is the last frame before end: a short clip's key moment often sits at an edge.
@@ -173,25 +195,9 @@ export function localFrames(o:{sources:Record<string,string>;dir:string;html?:Ht
         '-vn','-ac','1','-ar',String(AUDIO_RATE),'-f','f32le','-c:a','pcm_f32le',out]);
       return new Uint8Array(await readFile(out));
     },
-    async voice(clip) {
-      const dir=await scratch('voice'),parts:Uint8Array[]=[];
-      // In pieces, so a long clip never sits in memory whole. Each piece reads one step past its end: the last window needs it.
-      for(let k=0;;k++) {
-        const out=join(dir,`${k}.f32`);
-        const read=ff(['-ss',String(k*VOICE_CHUNK),'-t',String(VOICE_CHUNK+VOICE_STEP),'-i',file(clip),'-vn','-ac','1','-ar',String(AUDIO_RATE),'-f','f32le','-c:a','pcm_f32le',out]);
-        // Past the end of the sound there is nothing to read.
-        if(k)try {await read;} catch {break;} else await read;
-        const buf=await readFile(out).catch(()=>Buffer.alloc(0));
-        await rm(out,{force:true});
-        const samples=new Float32Array(buf.buffer.slice(buf.byteOffset,buf.byteOffset+Math.floor(buf.byteLength/4)*4));
-        parts.push(packVoice(voiceFrames(samples,AUDIO_RATE)));
-        if(samples.length<VOICE_CHUNK*AUDIO_RATE)break;
-      }
-      const all=new Uint8Array(parts.reduce((s,p)=>s+p.length,0));
-      let at=0;
-      for(const p of parts){all.set(p,at);at+=p.length;}
-      return all;
-    },
+    voice:async clip=>inChunks(await scratch('voice'),clip,VOICE_STEP,samples=>packVoice(voiceFrames(samples,AUDIO_RATE))),
+    // Windows tile each piece exactly (600 s / 10 ms): no read past the end needed.
+    levels:async clip=>inChunks(await scratch('levels'),clip,0,samples=>packLevels(levelFrames(samples,AUDIO_RATE))),
     async graphic(job) {
       if(!o.html)return {ok:false,report:'render failed: no graphics renderer on this computer'};
       return renderGraphic(join(o.dir,'graphics',job.id),job,file(job.backdrop.clip),o.html,ff);

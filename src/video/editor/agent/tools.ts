@@ -12,6 +12,8 @@ import {BEAT_CONFIDENCE_MIN,CAPTION_PRESETS,CAPTION_PRESET_IDS,PIP_CORNERS,TRANS
 import {footageText,rankFootage,rankText,screenActivity,screenSummary,shownMeanwhile} from './footage';
 import {deliveryOf,deliveryTable} from '../../delivery';
 import {levelGains,speechLevel} from '../../levels';
+import {levelsOf,type Levels} from '../../sound-levels';
+import {CLEAN_FIELD} from './levels-sfx-skill-text';
 import {findRetakes,joinSound,quietTo,retakeText,saidTwice,speechIn,stressedWords,voiceOf,wordEdge,type Voice} from '../../voice';
 import {AUDIO_MAX_SECONDS,AUDIO_RATE,stripTimes} from '@voxtale/frames';
 import type {Point} from '../../zoom';
@@ -102,6 +104,8 @@ export interface Workspace {
   levels?:Record<string,number|null>;
   /** Voice track of each speaking clip, by clip id; null = could not be read. */
   voices?:Map<string,Voice|null>;
+  /** Sound level every 10 ms of each speaking clip, by clip id; null = could not be read. Cuts sit in its troughs. */
+  soundLevels?:Map<string,Levels|null>;
   /** The edit as the creator left it (their items, locks), before this session's first save. */
   base?:EditDoc;
   /** Fields the creator set by hand, by item id; kept when the agent changes that item by name. */
@@ -201,7 +205,8 @@ export async function save(ws:Workspace):Promise<void> {
     ...(ws.frame?{frame:{aspect:ws.frame.aspect}}:{}),...(ws.reframes?{reframes:ws.reframes}:{}),...(ws.stacks?{stacks:ws.stacks}:{}),...(ws.motionTracks?{motionTracks:ws.motionTracks}:{}),
     eyesAt:(clip,t)=>ws.eyeCache?.get(eyeKey(clip,t))??undefined,
     edge:(clip,t,side,limit,other)=>{const v=ws.voices?.get(clip);return v?wordEdge(v,t,side,limit,other):t;},
-    quiet:(clip,t,side,limit)=>{const v=ws.voices?.get(clip);return v?quietTo(v,t,side,limit):limit;}});
+    quiet:(clip,t,side,limit)=>{const v=ws.voices?.get(clip);return v?quietTo(v,t,side,limit):limit;},
+    levels:clip=>ws.soundLevels?.get(clip)??undefined});
   await loadVoices(ws);
   const prev=ws.doc??ws.base;
   let built=build();
@@ -224,14 +229,35 @@ export async function save(ws:Workspace):Promise<void> {
     frame:ws.frame??null,reframes:ws.reframes??null,stacks:ws.stacks??null,motionTracks:ws.motionTracks??null},null,1));
 }
 
-/** Read the voice track of every speaking clip not read yet. A host that cannot gives none: the editor works from words alone. */
+/** What clean by level did: pieces it split, or why it could not. */
+function cleanNote(ws:Workspace):string {
+  const asked=ws.segments.filter(s=>'from' in s&&s.clean);
+  if(!asked.length)return '';
+  const blind=[...new Set(asked.filter(s=>!ws.soundLevels?.get(s.clip)).map(s=>s.clip))];
+  const cleaned=ws.doc?.tracks['a-roll'].filter(i=>i.reason?.startsWith('(cleaned)')).length??0;
+  return `\nclean by level: ${cleaned} pieces after pauses and hesitations were cut by sound`+(blind.length?`; no levels for ${blind.join(', ')} (cut by words)`:'');
+}
+
+/**
+ * Read the voice track and sound levels of every speaking clip not read yet. A host that cannot gives none: the
+ * editor works from words alone.
+ */
 async function loadVoices(ws:Workspace):Promise<void> {
-  const voices=ws.voices??=new Map();
-  await Promise.all(ws.job.clips.filter(c=>speaking(c)&&c.ref.hasAudio&&!voices.has(c.ref.id)).map(async c=>{
-    voices.set(c.ref.id,null);
-    if(!ws.frames.voice)return;
-    try {voices.set(c.ref.id,voiceOf(await ws.frames.voice(c.ref.hash)));} catch {/* stays null */}
-  }));
+  const voices=ws.voices??=new Map(),levels=ws.soundLevels??=new Map();
+  await Promise.all(ws.job.clips.filter(c=>speaking(c)&&c.ref.hasAudio).flatMap(c=>[
+    (async()=>{
+      if(voices.has(c.ref.id))return;
+      voices.set(c.ref.id,null);
+      if(!ws.frames.voice)return;
+      try {voices.set(c.ref.id,voiceOf(await ws.frames.voice(c.ref.hash)));} catch {/* stays null */}
+    })(),
+    (async()=>{
+      if(levels.has(c.ref.id))return;
+      levels.set(c.ref.id,null);
+      if(!ws.frames.levels)return;
+      try {levels.set(c.ref.id,levelsOf(await ws.frames.levels(c.ref.hash)));} catch {/* stays null */}
+    })(),
+  ]));
 }
 
 /** A recording of a screen: by its role, or by what the index saw in it. */
@@ -328,6 +354,10 @@ const segmentSchema=z.object({
   transition:transitionField,
   audioLead,audioLag,
   fade:fadeField,
+  clean:z.object({
+    pause:z.number().min(0.05).max(1.5).optional().describe('seconds of pause kept between phrases; default 0.25'),
+    fillers:z.boolean().optional().describe('drop hesitations (um, uh, erm); default true'),
+  }).optional().describe(CLEAN_FIELD),
 });
 const shotSchema=z.object({
   clip:z.string().describe('clip id of any video clip: speaking or not (a silent shot, music-only, ambient)'),
@@ -451,7 +481,7 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
         cutGate(ws,segments.map(s=>({clip:s.clip,shot:!('from' in s),...(s.note?{note:s.note}:{})})),unsure??[]);
         await change(ws,()=>{ws.segments=segments;});
         await loadVoices(ws);
-        return {text:report(ws)};
+        return {text:report(ws)+cleanNote(ws)};
       }}),
 
     defineTool({name:'set_captions',description:'Replace the caption spans. Only these words get captions (an editable caption track, not burnt into the picture): the hook and the few lines that carry the main ideas, not the whole video. Spans follow their words through recuts; words not in the cut are skipped. Empty list = no captions.',
