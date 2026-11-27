@@ -1,3 +1,4 @@
+// from github.com/xikhar/papercraft lib/paper-life.js (MIT; see LICENSE)
 // papercraft / lib / paper-life.js: a living world, as plumbing (references/motion.md section 12).
 //
 // Weather and air (fallers: leaves, snow, petals, ash, rain; motes: dust, pollen, spores, bubbles, embers), flyers

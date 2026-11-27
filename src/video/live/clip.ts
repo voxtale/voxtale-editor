@@ -13,7 +13,7 @@ import {run} from '../media';
 import type {Transcript} from '../transcript';
 import type {LiveWord} from './transcribe';
 
-/** Seconds kept past each side of a pick, for trimming in the editor. from REDACTED live-run.ts MARGIN */
+/** Seconds kept past each side of a pick, for trimming in the editor. */
 export const MARGIN=3;
 
 export const clipStem=(n:number)=>`clip-${String(n).padStart(2,'0')}`;
@@ -39,6 +39,7 @@ async function sha256(path:string):Promise<string> {
 export type PassageCutter=(source:string,from:number,to:number,out:string)=>Promise<void>;
 export const cutPassage:PassageCutter=async(source,from,to,out)=>{
   if(/^https?:\/\//.test(source)) {
+    // Only the passage is downloaded, never the whole live.
     await run('yt-dlp',['--quiet','--no-warnings','-f','bv*[height<=1080]+ba/b[height<=1080]/b','--download-sections',`*${from}-${to}`,'--force-keyframes-at-cuts',
       '--merge-output-format','mp4','-o',out,source]);
     return;

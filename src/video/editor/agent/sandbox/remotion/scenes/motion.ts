@@ -17,6 +17,7 @@ export const CURVES={
   endPush:[1,0,0.075,1], // slow push on the end card
   cursor:[0.36,0,0.03,0.97], // a cursor gliding to its target
   shake:[0.74,0,0.18,1], // impact shake
+  // `moderate` (motion-quality "Easing on a frame clock"): small travels under ~150 px
   moderate:[0.2,0.6,0.35,1],
 } as const satisfies Record<string,readonly [number,number,number,number]>;
 export type CurveName=keyof typeof CURVES;

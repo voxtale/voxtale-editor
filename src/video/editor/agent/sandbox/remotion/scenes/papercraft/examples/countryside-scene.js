@@ -1,5 +1,6 @@
+// from github.com/xikhar/papercraft examples/countryside-scene.js (MIT; see LICENSE)
 // papercraft / examples / countryside-scene.js — templates/popup-3d/scene.js of github.com/xikhar/papercraft (MIT, see
-// LICENSE), the countryside WORKED EXAMPLE, made a function for REDACTED's stage: <PaperStage options={COUNTRYSIDE}
+// LICENSE), the countryside WORKED EXAMPLE, made a function for our stage: <PaperStage options={COUNTRYSIDE}
 // build={countryside} />. Read it to see a whole world built; never reuse its palette, ground or pieces for another subject.
 import * as P2 from '../lib/paperkit-2d.js';
 import { makeCard, layeredCard, clusterLayout, platform } from '../lib/paperkit-3d.js';

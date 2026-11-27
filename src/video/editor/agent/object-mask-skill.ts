@@ -1,6 +1,6 @@
 // Agent text for picked objects in the subject mask (bd voxtale-editor-8a6). OBJECT_MASK_SKILL is in skill v30
 // (skill.ts). Tool descriptions are live.
-// Idea and add/remove semantics from REDACTED REDACTED/subject_objects.py (Premiere's Object Mask + and −).
+// Add and remove work like Premiere's Object Mask + and −.
 
 export const PICK_OBJECT_DESCRIPTION='Pick objects on one still of a clip, for text behind them: mode add puts the object over a graphic (a lamp, a mug, the head alone), mode remove cuts it out of the mask (a raised hand that should stay behind the text). Give points on the object (fractions of the SOURCE frame, as timeline_view shows it), a box round it, or both; exclude points mark what is not the object (the shirt under a mug). Returns the still with each object tinted, outlined and numbered, and per object its share of the frame and box: check the tint covers the object and nothing else, and pick again (more points, a tighter box, an exclude point) until it does. Then pass the same objects, with clip and t, as maskObjects to place_graphic. Needs the object model; without it this fails and says so.';
 

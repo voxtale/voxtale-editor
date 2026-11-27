@@ -19,7 +19,7 @@ describe('sound sync', () => {
     expect(r.confidence).toBeGreaterThan(8);
   });
 
-  // White noise scores ~8 peak/median even when unrelated (REDACTED's floor was set on speech), so the test floor is 20.
+  // White noise scores ~8 peak/median even when unrelated (the floor of 8 was set on speech), so the test floor is 20.
   test('placeBySound puts each file on a shared clock; an unrelated file gets no start', () => {
     const base=noise(6000,3);
     const envs=[{clipId:'a',env:base.slice(0,5000)},{clipId:'b',env:base.slice(500,5500)},{clipId:'c',env:noise(5000,99)}];

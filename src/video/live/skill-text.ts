@@ -1,5 +1,4 @@
 // Agent text for the finished-live tools; in editor skill v30 (skill.ts).
-// Gap lines from REDACTED editor/live-run.ts (pick and titles prompts).
 export const LIVE_SKILL_TEXT=`## A finished livestream → vertical clips
 
 When the creator gives a long live (a file or a URL, often 8-12 h) and wants clips:

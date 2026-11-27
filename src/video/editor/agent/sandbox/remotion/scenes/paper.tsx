@@ -1,4 +1,5 @@
 // Papercraft kit for scenes: import from './paper' only.
+// P2 = cards, prints, shapes; P3 = material, hinges,
 // crosses, folds, platforms; createLife = the world's life (leaves, birds, smoke); builtGround = bridge, stairs, house.
 // Typed any on purpose: the original JS defaults its options to null, and TypeScript would refuse every value passed.
 /* eslint-disable @typescript-eslint/no-explicit-any */

@@ -1,7 +1,7 @@
 # Bench harness (agenticvbench)
 
-Scripts as last run from the old monorepo: `ours/` drives this editor,
-`REDACTED/` drives REDACTED for comparison. Results and media stayed behind.
+Scripts as last run from the old monorepo: `ours/` drives this editor.
+Results and media stayed behind.
 
 Paths default to this repo; override with env vars:
 

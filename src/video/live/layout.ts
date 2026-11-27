@@ -17,7 +17,7 @@ import type {StackSpan} from './stack';
 
 /** Fractions of the live's frame, top-left corner. */
 export interface Box {x:number;y:number;w:number;h:number}
-/** One moment of the clip from `from` (seconds of the clip file). from REDACTED live-layout.ts Layout */
+/** One moment of the clip from `from` (seconds of the clip file). */
 export type LayoutPart={from:number;layout:'stack';facecam:Box}|{from:number;layout:'full'|'game';x:number};
 /** Gray picture, row-major, 0-255. */
 export interface Gray {width:number;height:number;data:Uint8Array}
@@ -29,7 +29,7 @@ export const FULL_FACE=0.2;
 export const CAM_PER_FACE=3.2;
 /** Seconds between samples; a layout shorter than MIN_PART joins its neighbour. */
 export const EVERY=2,MIN_PART=4;
-/** Contact sheet: one frame per SHEET_EVERY s, 4×6 tiles. from REDACTED live-layout.ts */
+/** Contact sheet: one frame per SHEET_EVERY s, 4×6 tiles. */
 export const SHEET_EVERY=4;
 
 const clamp=(v:number,a=0,b=1)=>Math.max(a,Math.min(b,v));
@@ -141,7 +141,7 @@ export function detectLayout(samples:Sample[],o:{fullFace?:number}={}):LayoutPar
   });
 }
 
-/** The agent's layout list, checked: in order, boxes inside the frame; what is wrong drops out; nothing left = game at the centre. from REDACTED live-layout.ts readLayouts */
+/** The agent's layout list, checked: in order, boxes inside the frame; what is wrong drops out; nothing left = game at the centre. */
 export function readLayout(list:unknown):LayoutPart[] {
   const frac=(v:unknown):v is number=>typeof v==='number'&&v>=0&&v<=1;
   const ok=(Array.isArray(list)?list:[]).flatMap((s:any):LayoutPart[]=>{
@@ -158,7 +158,7 @@ export function readLayout(list:unknown):LayoutPart[] {
 /**
  * The stack for a webcam box on a 1080×1920 canvas: the webcam band's height
  * follows the box's shape (480-960 px), the game below cropped beside the
- * webcam, not over it. from REDACTED live-layout.ts clipEdit
+ * webcam, not over it.
  */
 export function stackFor(f:Box,src:{width:number;height:number},canvas={width:1080,height:1920}):Stack {
   const W=canvas.width,H=canvas.height;
@@ -213,7 +213,7 @@ export async function sampleClip(path:string,dir:string,faces:FaceFinder):Promis
   return files.map((_,i)=>({t:i*EVERY,face:found[i]??null,...(raw.length>=(i+1)*W*H?{gray:{width:W,height:H,data:raw.subarray(i*W*H,(i+1)*W*H)}}:{})}));
 }
 
-/** Contact sheets of a clip: one frame per SHEET_EVERY s, 4 per row, 6 rows (24 per sheet; name-1.jpg, name-2.jpg…). from REDACTED live-layout.ts contactSheets */
+/** Contact sheets of a clip: one frame per SHEET_EVERY s, 4 per row, 6 rows (24 per sheet; name-1.jpg, name-2.jpg…). */
 export async function contactSheets(clip:string,dir:string,name:string):Promise<string[]> {
   await mkdir(dir,{recursive:true});
   await run(ffmpegPath(),['-v','error','-nostdin','-y','-i',clip,'-an','-vf',`fps=1/${SHEET_EVERY},scale=480:-2,tile=4x6:padding=4:color=black`,'-q:v','4',join(dir,`${name}-%d.jpg`)]);

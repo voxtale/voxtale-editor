@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Fetch the 14 AgenticVBench tasks used by the REDACTED plan (B1–B14).
+# Fetch the 14 AgenticVBench tasks of the bench plan (B1–B14).
 # Usage: bench/agenticvbench/fetch.sh [task-id ...]   (default: all)
 #
 # Layout under data/generate/_bench/agenticvbench/ (gitignored):

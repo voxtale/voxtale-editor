@@ -87,7 +87,6 @@ export function windowAround(t:number,sentences:[number,number][],duration:numbe
 /**
  * One line per sentence (or every 20 s at most), its time in front; a gap
  * over 20 s shows as "(no speech for N s)"; hints as "▲" lines.
- * from REDACTED live.ts lines()
  */
 export function lines(words:LiveWord[],hints:{t:number;text:string}[]=[],every=20):{t:number;text:string}[] {
   const out:{t:number;text:string}[]=[];
@@ -104,7 +103,7 @@ export function lines(words:LiveWord[],hints:{t:number;text:string}[]=[],every=2
   return [...out,...hints].sort((a,b)=>a.t-b.t);
 }
 
-/** The text a model reads for some candidates: each window with ±15 s of words and its cues. from REDACTED live-run.ts candidatesText */
+/** The text a model reads for some candidates: each window with ±15 s of words and its cues. */
 export function scanText(cands:Candidate[],words:LiveWord[],pad=15):string {
   return cands.map(c=>{
     const ws=words.filter(w=>w.end>c.start-pad&&w.start<c.end+pad);

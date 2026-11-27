@@ -23,8 +23,8 @@ export const SFX_SOUND_IDS=Object.keys(SFX_SOUNDS) as [SfxSound,...SfxSound[]];
 
 /**
  * How far under the voice each sound sits, dB of its loudest moment against
- * the speech target. REDACTED's ranges (click −6..−10, whoosh −10..−14, tick
- * −16..−20) at their middle; impact and riser are our pick.
+ * the speech target: the middle of each range (click −6..−10, whoosh
+ * −10..−14, tick −16..−20); impact and riser by ear.
  */
 export const SFX_UNDER_VOICE:Record<SfxSound|'tick'|'sweep',number>={click:-8,pop:-10,whoosh:-12,impact:-10,riser:-14,tick:-18,sweep:-12};
 

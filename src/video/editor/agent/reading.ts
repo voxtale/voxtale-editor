@@ -1,6 +1,5 @@
 // How long on-screen text must stay up to be read, and whether a placed card
-// gets that long. Times from REDACTED CLAUDE.md (animation rules: reading
-// time once the whole line is on screen), translated and kept as given.
+// gets that long. Times count from when the whole line is on screen.
 // Code only, no model.
 
 /** Seconds a viewer needs to read `text` once it is fully on screen. */
@@ -9,7 +8,9 @@ export function readSeconds(text:string):number {
   if(!words.length)return 0;
   // A number alone reads fast, but a key fact holds at least a second.
   if(words.length===1&&/^[~≈$€£+-]?\d[\d.,:%x×]*[kKmMbB%]?$/.test(words[0]!))return 1;
+  // ~0.2 s a word for 2-5 words (0.45 s at least); key info at least 1 s.
   if(words.length<=5)return Math.max(1,0.2*words.length);
+  // 6-8 words on two lines need about 2 s.
   if(words.length<=8)return 2;
   // Past 8 words: our extension at the same rate a word.
   return 2+0.25*(words.length-8);

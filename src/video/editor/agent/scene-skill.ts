@@ -1,8 +1,6 @@
 // Agent text for native scenes, papercraft, pixel art and text behind the
 // speaker: sections of skill v28 (./skill.ts). The tsx examples are checked
 // by the scene gate in tests.
-// (translated, adapted to write_scene/render_scene; REDACTED-only parts dropped:
-// reference/ guides, sfx recipes, stills.ts, styles/ paths, the inspector)
 
 /** Scenes in general: the scene file shape (which tool to use is in the skill's Graphics process). */
 export const SCENES_SKILL_TEXT = `## Native scenes (Remotion)
@@ -27,7 +25,7 @@ export default function Scene(p: z.infer<typeof schema> & SceneBase) {
 - The gate and type check reject bad files with line numbers: fix and write again under the same name.
 - Check the stills render_scene returns before you place it.`;
 
-/** Papercraft: from REDACTED papercraft/SKILL.md §0-§4, §6, the puppet example. */
+/** Papercraft scenes. */
 export const PAPERCRAFT_SKILL_TEXT = `## Papercraft scenes
 
 A papercraft scene is a photographed cardboard model: printed, cut cards unfold on a hinge from a printed ground, rise fast,
@@ -101,7 +99,7 @@ One flat, one mid-unfold, one settled, one holding:
 - During the unfold, cards turn on their fold; nothing grows or fades in.
 When in doubt, take something out: calmer, softer, less.`;
 
-/** Pixel art: from REDACTED pixel-art/SKILL.md §0-§7, §9 and MOTEUR.md (the engine is in ./pixel). */
+/** Pixel-art scenes (the engine is in ./pixel). */
 export const PIXEL_SKILL_TEXT = `## Pixel-art scenes
 
 A pixel-art scene is drawn by code on a fine grid. Four choices make the look; all four together, or it looks like a blurred image blown up:

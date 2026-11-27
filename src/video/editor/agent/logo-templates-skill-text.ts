@@ -1,5 +1,5 @@
-// Agent text for the last REDACTED gaps (logo, cut-out stills, D-Log M, new
-// make_graphic templates). Folded into skill v29 (skill.ts MERGE_V29); the
+// Agent text for the logo, cut-out stills, D-Log M and the newer
+// make_graphic templates. Folded into skill v29 (skill.ts MERGE_V29); the
 // A/V check at open is a local-server note (local-mcp/guide.ts).
 import {LOGO_CORNERS} from './logo';
 

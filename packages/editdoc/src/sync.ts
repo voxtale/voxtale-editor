@@ -3,11 +3,10 @@
 // member time = group time - start. A piece keeps its source range in its
 // own clip's time (words, captions, zooms hold); its angle, mic and
 // companions are read at the same moment, through the group. Pure.
-// Idea from REDACTED editor/src/schema.ts (group sources); code rewritten.
 import type { ARollItem, ClipRef, EditDoc, SyncGroup } from "./schema";
 import { soundSpans } from "./timeline";
 
-/** Sound matches at or above this peak-over-noise are sure. REDACTED's. */
+/** Sound matches at or above this peak-over-noise are sure. */
 export const SYNC_CONFIDENCE_MIN = 8;
 
 export function groupOf(groups: readonly SyncGroup[], clipId: string): SyncGroup | undefined {
@@ -53,6 +52,7 @@ export function soundSource(doc: Pick<EditDoc, "groups" | "clips">, item: Pick<A
  * whose match falls under `min` confidence stay out; null when fewer than
  * two are left.
  */
+// t0 = earliest member; doubtful under 8.
 export function groupFromStarts(id: string, placed: readonly { clipId: string; start: number; confidence?: number }[], min = SYNC_CONFIDENCE_MIN): SyncGroup | null {
   const sure = placed.filter(p => p.confidence === undefined || p.confidence >= min);
   if (sure.length < 2) return null;

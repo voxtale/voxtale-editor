@@ -1,6 +1,6 @@
 // The motion kit for agent graphics: a pro motion designer's curves, the snap
 // bounce, directional motion blur, stagger and settling counters. The numbers
-// and their rules come from REDACTED (measured on After Effects projects; skill
+// and their rules were measured on After Effects projects (skill
 // pro-motion). Here they serve GSAP compositions under either renderer:
 // MOTION_KIT_JS goes into every composition as window.kit, right after GSAP.
 

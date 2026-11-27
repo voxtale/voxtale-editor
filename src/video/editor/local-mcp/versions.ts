@@ -156,6 +156,7 @@ export async function moveToTrash(file:string):Promise<void> {
 export type Trash=(file:string)=>Promise<void>;
 
 /** Send frozen versions to the Trash. The working version always stays, so an edit never loses its last version. */
+// Never the last version left.
 export async function trashVersions(edit:string,ns:number[],trash:Trash=moveToTrash):Promise<{trashed:number[];index:VersionIndex}> {
   const i=await readVersions(edit);
   for(const n of ns) {

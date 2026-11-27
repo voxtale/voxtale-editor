@@ -26,7 +26,7 @@ get() { # url out sha256
 mkdir -p "$dir"
 case "$want" in
   --mlx)
-    # mlx-community/parakeet-tdt-0.6b-v3 at a pinned commit (same model REDACTED uses).
+    # mlx-community/parakeet-tdt-0.6b-v3 at a pinned commit.
     rev=ed2b7e8c15f9aaa0b5772e2efb986255eaef7e15
     out="$dir/parakeet-tdt-0.6b-v3-mlx"
     base="https://huggingface.co/mlx-community/parakeet-tdt-0.6b-v3/resolve/$rev"

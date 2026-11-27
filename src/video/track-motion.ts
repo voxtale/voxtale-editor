@@ -3,7 +3,7 @@
 // is followed in the a-roll piece under the item (voxtale_native/track.py:
 // OpenCV Lucas-Kanade + RANSAC similarity); the keys are made and stored by
 // @voxtale/editdoc (motion.ts, the item's `track`), and the render applies
-// them. Shape after REDACTED editor/src/tracking.ts (planTrack, applyTrack).
+// them.
 import {canvasToSource,pieceAt,trackFromFrames,type ARollItem,type EditDoc,type MotionTrack,type TrackFrame} from '@voxtale/editdoc';
 import {nativeTrackPoint} from '../native/bridge';
 

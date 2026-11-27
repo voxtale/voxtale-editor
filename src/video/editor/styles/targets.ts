@@ -126,6 +126,7 @@ export function reportMarkdown(usage:string,reports:Report[],t:Targets):string {
 }
 
 /** Share of cuts within `tol` s of a beat on the grid first + k·60/bpm. */
+// On the beat: within 0.12 s, beat confidence at least 0.4.
 export function cutsOnBeat(cuts:number[],beats:{bpm:number;first:number;confidence?:number}|undefined,tol=0.12,minConfidence=0.4):number|undefined {
   if(!beats||!cuts.length||!(beats.bpm>0)||(beats.confidence??1)<minConfidence)return undefined;
   const p=60/beats.bpm;

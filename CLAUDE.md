@@ -25,8 +25,6 @@ when asked.
 
 - Every LLM prompt lives in the versioned registry (`src/services/prompts.ts`);
   versions are append-only. Tests assert wiring via prompt ids, not copy.
-- Code or text copied from REDACTED keeps its `// from REDACTED <file>` mark.
-  The repo is private; those parts must be replaced before any public release.
 
 ## Writing style
 

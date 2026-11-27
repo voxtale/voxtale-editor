@@ -1,5 +1,4 @@
-// Small REDACTED gaps: timed creator notes, finish replies, samey and brand
-// review counts, ripple keeping music whole and shifting caption word times,
+// Timed creator notes, finish replies, samey and brand review counts, ripple keeping music whole and shifting caption word times,
 // and the notes/outside-text skill edit. All code, no model, no network.
 import {afterAll,describe,expect,test} from 'bun:test';
 import {mkdtemp,rm} from 'node:fs/promises';

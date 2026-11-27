@@ -1,4 +1,4 @@
-// Cutting by sound level: 10 ms levels, the REDACTED clean port (findCuts),
+// Cutting by sound level: 10 ms levels, findCuts,
 // cuts in the quietest spot, and `clean` segments in buildCut. Synthetic
 // levels only: no file, no ffmpeg.
 import {describe,expect,test} from 'bun:test';

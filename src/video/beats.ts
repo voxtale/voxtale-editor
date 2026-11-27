@@ -119,6 +119,7 @@ export function findBeats(samples:Float32Array,rate:number):Beats|undefined {
  * beats of the hit's strength against the track's strong hits (its 90th
  * percentile), capped at 1.
  */
+// Confidence = grid fit mean over the onset envelope.
 function gridConfidence(o:Float32Array,period:number,phase:number):number {
   const sorted=Float32Array.from(o).sort(),top=sorted[Math.floor(sorted.length*0.9)]!;
   if(!(top>0))return 0;

@@ -1,4 +1,4 @@
-// Fixes from AgenticVBench tasks REDACTED won (bench2 summary, "Mechanics"):
+// Fixes from AgenticVBench tasks we lost (bench2 summary, "Mechanics"):
 // timeline_view edges, wordless talk clips, render size/fps/fit, canvas shape.
 import {afterAll,beforeAll,describe,expect,it} from 'bun:test';
 import {createHash} from 'node:crypto';

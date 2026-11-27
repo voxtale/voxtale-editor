@@ -1,4 +1,5 @@
-// papercraft / figure.js (REDACTED) — a character seen as ONE flat card at a time, like a paper puppet: the front when he
+// from github.com/xikhar/papercraft figure.js (MIT; see LICENSE)
+// papercraft / figure.js — a character seen as ONE flat card at a time, like a paper puppet: the front when he
 // walks toward the camera, his back when he walks away, his profile (mirrored left / right) when he crosses. Each view
 // is a printed card (body and head) with two leg cards on hip pivots; the figure always turns to face the camera, so a
 // card is never seen edge-on and two faces never mix. The stage picks the view from his heading (stage.js, heroWalk).

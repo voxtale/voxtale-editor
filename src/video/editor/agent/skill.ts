@@ -631,15 +631,14 @@ const SURVEY_THEN_LOOK:[old:string,text:string][]=[
 ];
 
 /**
- * v25 (REDACTED gap review, docs/research/REDACTED-prompts-gap.md items
- * 1,2,3,5,6,7,9,10,13,20): story spine, on-screen words, reworded retakes,
+ * v25: story spine, on-screen words, reworded retakes,
  * clips that stand alone, tick list, do it don't list it, show what is named,
  * wide/tight on idea changes, transitions from the footage, the creator's
  * language. Plus the set_cut \`unsure\` list (bench seq-26) and the two new
  * measured warnings (TOO SHORT TO READ, OVER THE FACE).
  */
 const MERGE_V25:[old:string,text:string][]=[
-  // Item 1, from REDACTED .claude/skills/storytelling/SKILL.md §1, §2.1, §2.4, §6.2-6.5 (translated, cut down).
+  // Item 1.
   [`## Cutting rules
 `,
    `## The story
@@ -671,7 +670,7 @@ it, I did it, it worked" is a brag, not a story. Then:
 
 ## Cutting rules
 `],
-  // Item 3, adapted from REDACTED CLAUDE.md "Smart clean" (reworded retakes).
+  // Item 3.
   [`  start again", dead air, rambles that repeat a point already made.
 `,
    `  start again", dead air, rambles that repeat a point already made.
@@ -680,7 +679,7 @@ it, I did it, it worked" is a brag, not a story. Then:
   opening, a point tried two ways, an intro said again later); keep the
   better one. Take groups catch only repeated wording.
 `],
-  // Item 10, adapted from REDACTED rules/reframing.
+  // Item 10.
   [`screen: the graphic is the emphasis there. Jump cuts stay wide; a clean cut
 at a pause reads fine without one.
 `,
@@ -690,7 +689,7 @@ When the speaker moves to a new idea, a change of framing marks it: go
 tight for the new idea if the last one played wide, or back wide if it was
 tight. That is the one place a zoom does not need a stressed line.
 `],
-  // Item 13, from REDACTED rules/transitions (translated).
+  // Item 13.
   [`- \`zoom\`: punching through to a reveal.
 `,
    `- \`zoom\`: punching through to a reveal.
@@ -701,7 +700,7 @@ gesture, something passing the lens. Look for one where the footage offers
 it. Never a plain shape (a wipe, a box, a circle) crossing the screen to
 hide a cut.
 `],
-  // Item 9, from REDACTED CLAUDE.md "long edit" and the cards rule.
+  // Item 9.
   [`  shaky or UNUSABLE. A shot that does not match is worse than none.
 `,
    `  shaky or UNUSABLE. A shot that does not match is worse than none.
@@ -711,7 +710,7 @@ hide a cut.
   label with its name is not showing it. In a long video, ask of each
   stretch: what is named here that the viewer never sees?
 `],
-  // Item 2, adapted from REDACTED .claude/skills/gout-video/SKILL.md "Writing on-screen text" and "Always".
+  // Item 2.
   [`  2–4 word callout. Not the same words as a caption at the same moment.
 `,
    `  2–4 word callout. Not the same words as a caption at the same moment.
@@ -739,7 +738,7 @@ number, 2 s for six to eight, fades not counted): give it more time or fewer
 words. \`watch_cut\` says OVER THE FACE when text sits on the speaker's face:
 move it to the top, the bottom or the free side, or make it smaller.
 `],
-  // Item 5, adapted from REDACTED CLAUDE.md "Shorts" and storytelling §6.3.
+  // Item 5.
   [`## Finish
 `,
    `## Clips from a longer video
@@ -754,7 +753,7 @@ asked, make fewer and say so.
 
 ## Finish
 `],
-  // Item 7, from REDACTED CLAUDE.md "first edit" / "when a command fails" (translated).
+  // Item 7.
   [`problem left open. Then stop.
 `,
    `problem left open. Then stop.
@@ -763,7 +762,7 @@ Do not hand back work the tools can do: do it. Leave a problem open only
 when no tool can fix it, and say exactly what blocks it (the missing tool,
 footage or fact).
 `],
-  // Items 6 and 20, adapted from REDACTED context items.
+  // Items 6 and 20, adapted
   [`creator reads these to follow your edit step by step. Keep them short; no
 headings, no lists.
 `,
@@ -793,7 +792,7 @@ const SKILL_V22=withEdits(SKILL_V21,FRAME_CHECKS);
 
 const SKILL_V24=withEdits(withMechanics(SKILL_V22),SURVEY_THEN_LOOK);
 
-// v23 (bd super-tale-ep1a): v22 plus the editing mechanics. v24: survey, then look close. v25: REDACTED text.
+// v23 (bd super-tale-ep1a): v22 plus the editing mechanics. v24: survey, then look close. v25: story and craft text.
 /**
  * v26 (bd super-tale-qvvr, oxhv, xaf7, jxrx, ghk4): the agent's sound effects,
  * the music in-point and beat snap for free gestures only, the colour grade,
@@ -813,7 +812,7 @@ const FINISH_TOOLS_V26:[old:string,text:string][]=[
    not snap". Do not move words to chase a beat.
    Sound effects (see Sound effects), colour (see Colour).
 `],
-  // Sound effects from REDACTED rules/bruitages.md; music from REDACTED rules/musique-sur-le-temps.md (translated, cut down).
+  // Sound effects and music.
   [`## Finish
 `,
    `## Sound effects
@@ -874,10 +873,9 @@ brief: follow them, and say in \`finish\` when this video could not keep one.
 
 const SKILL_V25=withEdits(SKILL_V24,MERGE_V25);
 /**
- * v27: graphics after REDACTED. Remotion renders by default (HyperFrames on
- * request), same composition format; window.kit carries REDACTED's measured
- * motion (curves, snap, motion blur, cool-down, shake); taste, title cards and
- * motion rules from REDACTED's skills. Copied parts are marked per line group.
+ * v27: graphics. Remotion renders by default (HyperFrames on request), same
+ * composition format; window.kit carries measured motion (curves, snap,
+ * motion blur, cool-down, shake); taste, title cards and motion rules.
  */
 const GRAPHICS_V27:[old:string,text:string][]=[
   [`### How it looks
@@ -1087,7 +1085,7 @@ pass it as \`inputLut\`.`],
 ];
 
 /**
- * v30: W22 REDACTED-parity branches. Edit versions, the text timeline and
+ * v30: W22 branches. Edit versions, the text timeline and
  * find_words; clean by level; frame shape (set_frame) and motion tracking
  * (track_title); objects in the subject mask (pick_object, maskObjects);
  * finished lives to vertical clips (live_*); where sounds come from

@@ -5,8 +5,8 @@
 // item's ends, are encoded as before. Parts are MPEG-TS (parameter sets in
 // band, so copied and encoded parts decode in one stream) joined by the concat
 // demuxer with exact durations, then muxed to MP4 by copy.
-// Idea from REDACTED editor/fast-video.ts (plain passages done by ffmpeg, the
-// rest by the full renderer; frame count checked, else the full renderer).
+// Plain passages go to ffmpeg, the rest to the full renderer; the frame
+// count is checked, else the full renderer does it all.
 import type {Picture,RenderPlan} from './render-edit';
 import type {VideoCodec} from './encoders';
 

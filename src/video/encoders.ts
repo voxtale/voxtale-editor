@@ -9,7 +9,7 @@ import {ffmpegPath} from './ffmpeg-path';
 export type VideoCodec='h264'|'hevc';
 export interface VideoEncoder {codec:VideoCodec;name:string;hardware:boolean}
 
-/** Tried in order off a Mac. from REDACTED editor/encoders.ts (TRIED) */
+/** Tried in order off a Mac. */
 export const HARDWARE:Record<VideoCodec,{darwin:string[];other:string[]}>={
   h264:{darwin:['h264_videotoolbox'],other:['h264_nvenc','h264_qsv','h264_amf','h264_mf']},
   hevc:{darwin:['hevc_videotoolbox'],other:['hevc_nvenc','hevc_qsv','hevc_amf','hevc_mf']},
@@ -19,7 +19,7 @@ export const SOFTWARE:Record<VideoCodec,string>={h264:'libx264',hevc:'libx265'};
 export type EncoderTest=(ffmpeg:string,args:string[])=>Promise<boolean>;
 const ffTest:EncoderTest=(ffmpeg,args)=>spawnText(ffmpeg,args,{timeoutMs:20_000}).then(r=>r.code===0,()=>false);
 
-/** A few black frames through `name` and thrown away: does it really encode here? from REDACTED editor/encoders.ts */
+/** A few black frames through `name` and thrown away: does it really encode here? */
 export const testArgs=(name:string)=>['-hide_banner','-nostdin','-v','error','-f','lavfi','-i','color=black:s=256x144:r=30:d=0.2',
   ...hardwareFlags(name),'-pix_fmt',pixFmt(name),'-frames:v','3','-c:v',name,'-f','null','-'];
 
@@ -59,9 +59,9 @@ export function machineEncoder(o:Omit<DetectOptions,'test'|'platform'|'env'>={})
 /** Forget what machineEncoder found (tests). */
 export const clearEncoderCache=()=>cache.clear();
 
-/** VideoToolbox: the Apple chip when there is one, else Apple's CPU encoder, rather than a failed export (Intel Mac, VM). from REDACTED fast-video.ts (encodeArgs) */
+/** VideoToolbox: the Apple chip when there is one, else Apple's CPU encoder, rather than a failed export (Intel Mac, VM). */
 const hardwareFlags=(name:string)=>/_videotoolbox$/.test(name)?['-allow_sw','1']:[];
-/** GPU encoders off a Mac take NV12; VideoToolbox and the CPU take yuv420p. from REDACTED fast-video.ts (encodeArgs) */
+/** GPU encoders off a Mac take NV12; VideoToolbox and the CPU take yuv420p. */
 const pixFmt=(name:string)=>/_(nvenc|qsv|amf|mf)$/.test(name)?'nv12':'yuv420p';
 
 export interface EncodeQuality {

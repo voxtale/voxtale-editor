@@ -22,6 +22,7 @@ type Change=(ws:Workspace,f:()=>void)=>Promise<void>;
 
 export const SFX_HITS_MAX=24;
 /** More impacts than this in one video and each one means less. */
+// Impacts: rare, for the big moments.
 export const IMPACTS_MAX=3;
 
 const isLibrary=(s:string):s is SfxSound=>(SFX_SOUND_IDS as string[]).includes(s);
@@ -169,7 +170,7 @@ export function loudnessLines(ws:Workspace,doc:EditDoc):string[] {
 
 // ---- colour ---------------------------------------------------------------------
 
-/** Target mid grey of a face-lit frame (sRGB median luma). Our pick, not REDACTED's. */
+/** Target mid grey of a face-lit frame (sRGB median luma). */
 export const GRADE_TARGET_LUMA=0.45;
 /** Exposure is left alone within a third of a stop. */
 const EXPOSURE_DEADBAND=1/3,EXPOSURE_MAX=1;

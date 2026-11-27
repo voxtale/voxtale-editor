@@ -1,12 +1,12 @@
 # Third-party notices: editor agent graphics
 
-The motion kit (`motion.ts`), the v27 graphics skill text (`skill.ts`, GRAPHICS_V27) and the title-card template (`templates.ts`) adapt text and code from the sources below. REDACTED's own text and code are used with permission for internal use only and are marked `// from REDACTED <file>`.
+The motion kit (`motion.ts`), the v27 graphics skill text (`skill.ts`, GRAPHICS_V27) and the title-card template (`templates.ts`) adapt text and code from the sources below.
 
 Remotion (remotion.dev) renders graphics by default. It is not bundled here: `sandbox/remotion/package.json` installs it. Remotion License: free for individuals and companies of up to 3 people; larger companies need a paid company licence.
 
 ## papercraft (MIT)
 
-`sandbox/remotion/scenes/papercraft/` is the papercraft lib (github.com/xikhar/papercraft) as REDACTED vendors it; its LICENSE sits beside it. `scenes/paper.tsx` and the papercraft text in `scene-skill.ts` adapt REDACTED's wrapper and skill.
+`sandbox/remotion/scenes/papercraft/` is the papercraft lib (github.com/xikhar/papercraft); its LICENSE sits beside it. `scenes/paper.tsx` and the papercraft text in `scene-skill.ts` build on it.
 
 ## snapcn (MIT)
 

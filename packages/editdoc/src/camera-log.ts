@@ -4,8 +4,8 @@
 // highlights are squeezed gently (gamut compression that keeps luminance,
 // tone mapping that keeps hue half way, as "Hue Preservation" at Highlight
 // Saturation 0.5). HLG and PQ (phones, HDR cameras) take the same road from
-// BT.2020. DJI consumer D-Log M has no published formula: REDACTED ships
-// DJI's own LUT; here the creator passes it as `inputLut`.
+// BT.2020. DJI consumer D-Log M has no published formula: it needs DJI's
+// own LUT, which the creator passes as `inputLut`.
 // Formulas and primaries: colour-science (BSD-3-Clause, (c) 2013 Colour
 // Developers), checked against its test values. Pure.
 import { activeGrade, applyGrade, LUT_SIZE, sampleCube, type Cube, type Grade, type RGB } from "./grade";

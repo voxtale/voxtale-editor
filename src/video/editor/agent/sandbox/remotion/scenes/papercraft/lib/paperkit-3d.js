@@ -1,3 +1,4 @@
+// from github.com/xikhar/papercraft lib/paperkit-3d.js (MIT; see LICENSE)
 // papercraft / paperkit-3d.js
 // three.js building blocks for paper worlds: a dead-matte paper material (wrap light, a shadow leak in the world's
 // colour, back-lit translucency), cut cards with real thickness and a printed cut edge, springs and hinges, the

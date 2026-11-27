@@ -1,3 +1,4 @@
+// from github.com/xikhar/papercraft examples/countryside.js (MIT; see LICENSE)
 // papercraft / examples / countryside.js
 // WORKED EXAMPLES, not a parts library. The pieces of one shipped world (an autumn countryside) built with the method
 // the references teach: the silhouettes (tree, pine, house, fence, figure), the layered collage prints (folk tree,

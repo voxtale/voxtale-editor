@@ -1,6 +1,6 @@
 """Objects added to the subject mask or cut out of it, picked by point or box on one still and followed both ways from it.
 
-REDACTED does this with macOS Vision and SAM 2.1 (Mac with Apple silicon only). Ours runs anywhere the face finder does:
+Runs anywhere the face finder does:
 MobileSAM (Apache-2.0 code, MIT ONNX export by Acly; 28 MB encoder + 16 MB decoder) through onnxruntime on the CPU.
 Not in git: ``tools/fetch-object-model.sh`` puts both files in models/ (or set VOXTALE_OBJECT_ENCODER / _DECODER).
 Without them, or without onnxruntime, the op fails with a ``no-model:`` error and the render falls back to the plain
@@ -285,8 +285,10 @@ def combine(base: numpy.ndarray, layers: list[tuple[str, numpy.ndarray]]) -> num
         if mode == "add":
             m = numpy.maximum(m, p)
             continue
+        # A 6 px margin, so the object's fringe goes with it (scaled to 1080p).
         r = max(1, round(6 * h / 1080))
         m = m * (1 - cv2.dilate(p, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))))
+        # Near the removed object keep only what joins a big piece of the
         # mask (the person); bits of background taken with the object go.
         core = (m > 0.5).astype(numpy.uint8)
         count, lab, stats, _ = cv2.connectedComponentsWithStats(core, 8)

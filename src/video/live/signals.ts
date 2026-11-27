@@ -11,7 +11,7 @@ export type SignalKind='sound'|'chat'|'marker'|'laugh'|'replays'|'image';
 export interface Signal {t:number;kind:SignalKind;weight:number;note:string}
 export interface ChatMessage {t:number;author?:string;text:string}
 
-/** "1:23:40" (or "23:40") ↔ seconds. from REDACTED live.ts */
+/** "1:23:40" (or "23:40") ↔ seconds. */
 export const hms=(s:number)=>{
   const t=Math.max(0,Math.round(s)),h=Math.floor(t/3600),m=Math.floor((t%3600)/60),x=t%60;
   return `${h}:${String(m).padStart(2,'0')}:${String(x).padStart(2,'0')}`;
@@ -23,7 +23,7 @@ const quantile=(xs:number[],q:number)=>{const s=[...xs].sort((a,b)=>a-b);return 
 
 // ---- sound -------------------------------------------------------------------
 
-/** RMS level (dB) per 2 s of the live's sound: 8 kHz, 16000 samples per frame. from REDACTED live.ts soundPeaks */
+/** RMS level (dB) per 2 s of the live's sound: 8 kHz, 16000 samples per frame. */
 export async function loudness(source:string):Promise<number[]> {
   const out=await run(ffmpegPath(),['-v','error','-nostdin','-i',source,'-vn','-af',
     'aresample=8000,asetnsamples=n=16000,astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-','-f','null','-']);
@@ -36,7 +36,7 @@ export function parseLoudness(text:string):number[] {
 }
 /**
  * Loud moments: frames over max(median+4 dB, the 99.5th percentile), one per
- * 20 s at most. `step` = seconds per level. from REDACTED live.ts soundPeaks
+ * 20 s at most. `step` = seconds per level.
  */
 export function soundPeaks(levels:number[],step=2):Signal[] {
   if(levels.length<10)return [];
@@ -101,7 +101,7 @@ export function perMinute(chat:ChatMessage[]):number[] {
   for(const m of chat){const i=Math.floor(m.t/60);per[i]=(per[i]??0)+1;}
   return Array.from(per,n=>n??0);
 }
-/** Minutes where chat runs hot: at least 2.5× the median and 10 messages. from REDACTED live.ts chatPeaks */
+/** Minutes where chat runs hot: at least 2.5× the median and 10 messages. */
 export function chatPeaks(per:number[]):Signal[] {
   const med=median(per)||1,top=Math.max(1,...per);
   return per.flatMap((n,m)=>n>=Math.max(10,2.5*med)?[{t:m*60,kind:'chat' as const,weight:Math.min(1,n/top),note:`chat ×${(n/med).toFixed(1)} (${n} messages that minute)`}]:[]);
@@ -148,7 +148,7 @@ export function parseMarkers(text:string):Signal[] {
 
 // ---- replays -----------------------------------------------------------------
 
-/** YouTube "most replayed" (yt-dlp `heatmap`): slices at 0.6 or more, the first skipped (always high). from REDACTED live.ts replayPeaks */
+/** YouTube "most replayed" (yt-dlp `heatmap`): slices at 0.6 or more, the first skipped (always high). */
 export function replayPeaks(heatmap:{start_time:number;end_time:number;value:number}[]):Signal[] {
   return heatmap.filter((h,i)=>i>0&&h.value>=0.6).map(h=>({t:h.start_time,kind:'replays' as const,weight:h.value,note:`most replayed part (${Math.round(h.value*100)}%) until ${hms(h.end_time)}`}));
 }

@@ -45,8 +45,7 @@ interface Recipe {about:string;graph:(p:number)=>string}
 const f=(x:number)=>Number(x.toFixed(1));
 
 /**
- * Starter recipes, each ending on a fade-out. The first five are REDACTED's (rules/bruitages.md); variants change pitch.
- * from REDACTED rules/bruitages.md
+ * Starter recipes, each ending on a fade-out. The first five are the base sounds; variants change pitch.
  */
 export const SFX_RECIPES={
   whoosh:{about:'air past the camera, for a move or a slide',graph:p=>`anoisesrc=d=0.6:seed=7:c=pink:a=0.8,bandpass=f=${f(1200*p)}:t=o:w=1.5,afade=t=in:d=0.35:curve=exp,afade=t=out:st=0.35:d=0.25:curve=exp`},
@@ -74,7 +73,6 @@ type Ff=(args:string[])=>Promise<void>;
 /**
  * Render a graph to a 48 kHz WAV in `dir`, limited under -1 dBFS, and measure its loudest moment. The same graph and length
  * are the same sound: one hash, one file, made once.
- * from REDACTED REDACTED/sfx.py (ffmpeg -f lavfi, alimiter, pcm_s24le, written via a .part file)
  */
 export async function makeSfx(ff:Ff,dir:string,name:string,graph:string,seconds?:number):Promise<MadeSfx> {
   const why=badSfxGraph(graph);

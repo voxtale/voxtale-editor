@@ -2,6 +2,7 @@
 // tracks inside a range of the cut, and add the words to each clip's
 // transcript in source time. One audio file per clip (its heard passages
 // joined with short silences), sent once; cached by clip and passages.
+// Pick items on the tracks, clip them to the range, map through speed.
 import {createHash} from 'node:crypto';
 import {mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -10,7 +11,7 @@ import {transcribeAudio} from './transcript';
 
 export const SEQUENCE_TRACKS=['a-roll','b-roll','voiceover','music'] as const;
 export type SequenceTrack=(typeof SEQUENCE_TRACKS)[number];
-/** Shorter passages carry no word worth the call. from REDACTED transcribe-sequence.ts */
+/** Shorter passages carry no word worth the call. */
 const MIN_PASSAGE=0.05;
 /** Silence between joined passages, so words do not run across a join. */
 export const PASSAGE_GAP=0.5;
@@ -21,7 +22,6 @@ export interface Passage {clipId:string;from:number;to:number}
 /**
  * The source passages the cut plays on these tracks between `range` (cut seconds), merged per clip where they touch.
  * Muted b-roll is not heard and is skipped, as are suggestions.
- * from REDACTED editor/transcribe-sequence.ts sequenceRanges
  */
 export function sequencePassages(doc:EditDoc,tracks:readonly SequenceTrack[],range?:{from?:number;to?:number}):Passage[] {
   const lo=range?.from??0,hi=range?.to??Infinity,out:Passage[]=[];

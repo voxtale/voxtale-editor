@@ -9,9 +9,9 @@ import {tmpdir} from 'node:os';
 import {spawnText} from '../spawn';
 import {ffmpegPath,ffprobePath} from './ffmpeg-path';
 
-/** Video pages yt-dlp reads (the page link is not the file). from REDACTED REDACTED/download.py */
+/** Video pages yt-dlp reads (the page link is not the file). */
 export const VIDEO_SITES=['youtube.com','youtu.be','x.com','twitter.com','tiktok.com','instagram.com','vimeo.com','twitch.tv','kick.com'];
-/** A whole video with no start or end: 15 min at most (a clip nearly always does). from REDACTED REDACTED/download.py */
+/** A whole video with no start or end: 15 min at most (a clip nearly always does). */
 export const MAX_WHOLE_S=900;
 export const MAX_BYTES=4*2**30;
 export const AUDIO=new Set(['.mp3','.wav','.m4a','.aac','.aif','.aiff','.flac','.ogg']);
@@ -19,7 +19,7 @@ export const MEDIA=new Set([...AUDIO,'.mp4','.mov','.m4v','.webm','.mkv','.png',
 const TYPES:Record<string,string>={'audio/mpeg':'.mp3','audio/wav':'.wav','audio/x-wav':'.wav','audio/mp4':'.m4a','audio/aac':'.aac','audio/ogg':'.ogg',
   'audio/flac':'.flac','video/mp4':'.mp4','video/quicktime':'.mov','video/webm':'.webm','image/png':'.png','image/jpeg':'.jpg','image/webp':'.webp','image/gif':'.gif'};
 
-/** "83", "1:23" or "1:02:03.5" → seconds. from REDACTED REDACTED/download.py */
+/** "83", "1:23" or "1:02:03.5" → seconds. */
 export function seconds(s:string|number):number {
   if(typeof s==='number')return s;
   let t=0;
@@ -52,7 +52,7 @@ export async function uniquePath(dir:string,stem:string,ext:string):Promise<stri
 
 export interface ClipRange {start?:number;end?:number}
 
-/** yt-dlp args for a clip into `tmp`: 1080p at most, H.264 and AAC first, 8 fragments at a time (a Twitch clip comes in small pieces). from REDACTED REDACTED/download.py */
+/** yt-dlp args for a clip into `tmp`: 1080p at most, H.264 and AAC first, 8 fragments at a time (a Twitch clip comes in small pieces). */
 export function ytdlpArgs(url:string,tmp:string,r:ClipRange&{thumbnail?:boolean}):string[] {
   const section=r.start!==undefined||r.end!==undefined?['--download-sections',`*${r.start??0}-${r.end??'inf'}`,'--force-keyframes-at-cuts']
     :['--match-filter',`duration<=${MAX_WHOLE_S}`];
@@ -117,7 +117,7 @@ async function clip(o:DownloadOptions,dest:string,r:ClipRange):Promise<Downloade
   }
 }
 
-/** Opus (YouTube) in an MP4 Premiere will not read: the sound to AAC, the picture kept as is. from REDACTED REDACTED/download.py (premiere_audio) */
+/** Opus (YouTube) in an MP4 Premiere will not read: the sound to AAC, the picture kept as is. */
 async function editableAudio(video:string):Promise<string> {
   const probe=await spawnText(ffprobePath(),['-v','error','-select_streams','a:0','-show_entries','stream=codec_name','-of','csv=p=0',video]).catch(()=>null);
   const codec=probe?.stdout.trim()??'';

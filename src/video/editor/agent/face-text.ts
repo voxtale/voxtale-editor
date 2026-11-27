@@ -1,7 +1,7 @@
 // Text over the speaker's face, measured. Where the face sits in the output
 // frame at a moment (the index face box through the cover fit and the zoom),
-// and how much of it a drawn overlay covers. Idea from REDACTED's cards rule
-// (nothing over a face); the check is ours. Code only, no model.
+// and how much of it a drawn overlay covers (rule: nothing over a face).
+// Code only, no model.
 import {shown,zoomAt,type EditDoc} from '@voxtale/editdoc';
 import type {Face} from './kit';
 

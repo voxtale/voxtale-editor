@@ -10,6 +10,6 @@ export const TRACK_TITLE_DESCRIPTION=`Pin a text or graphic to a spot in the sce
 /** Skill section for the next skill version: after zoom and reframe. */
 export const TRACK_SKILL_TEXT=`### Frame shape and motion tracking
 - A vertical or square cut: \`set_frame\` aspect "9:16" or "1:1" once, before captions and text, since their places read off the frame. The crop follows the speaker; check watch_cut for a face cut by the edge (two people far apart cannot both fit: say so).
-- On a narrow frame a punch-in crops further: keep the face inside. Alternating normal and tight (x1.15 to x1.3) on a change of idea hides jump cuts in 9:16 too.
+- On a narrow frame a punch-in crops further: keep the face inside (scale never under 1, no black bars). Alternating normal and tight (x1.15 to x1.3) on a change of idea hides jump cuts in 9:16 too.
 - A title that should sit in the scene (on a wall, beside a sign) while the camera moves: place the text or graphic, then \`track_title\` on a fixed textured spot near it. Read the result: a big "moved" with "partial" means the item runs past the shot, so trim it to the shot. Skip tracking on a locked-off camera: nothing moves.
 `;

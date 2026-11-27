@@ -1,4 +1,4 @@
-// Last REDACTED gaps: proxy shapes, A/V check at open, templates, logo, cut-out stills, D-Log M. Pure parts, no ffmpeg.
+// Proxy shapes, A/V check at open, templates, logo, cut-out stills, D-Log M. Pure parts, no ffmpeg.
 import {describe,expect,it} from 'bun:test';
 import {mkdtempSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -91,7 +91,7 @@ describe('brand logo on the cut (jo6.1)',async()=>{
   });
 });
 
-describe('templates ported from REDACTED',async()=>{
+describe('make_graphic templates',async()=>{
   const {templateHtml,templateSchema}=await import('../src/video/editor/agent/templates');
   const at=(w:number|undefined,fb:number)=>w===undefined?fb:w*0.4;
   const html=(t:unknown,face?:{x:number;y:number;w:number;h:number})=>templateHtml(templateSchema.parse(t),{width:1920,height:1080,seconds:6,at,...(face?{face}:{})});

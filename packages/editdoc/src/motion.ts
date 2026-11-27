@@ -10,6 +10,7 @@ type Size = { width: number; height: number };
 /** One sampled frame of a subject path: source second, centre x, y and size w, h (fractions), or nulls when nobody is seen. */
 export type SubjectFrame = [number, number | null, number | null, number | null, number | null];
 
+// Smoothing time and dead zone per speed, like Premiere's Motion Tracking presets.
 /** Seconds of Gaussian smoothing on the subject's path. */
 export const REFRAME_SIGMA: Record<ReframeSpeed, number> = { slower: 0.9, default: 0.45, faster: 0.15 };
 /** How far the subject may drift (fraction of the clip's width) before the crop follows. */

@@ -1,6 +1,6 @@
 // Line up cameras and mics recorded together by their sound, pick who is
 // talking, and measure a clip's sound against its picture (A/V offset).
-// Method from REDACTED REDACTED/sync.py: 8 kHz mono, a 500 Hz loudness
+// Method: 8 kHz mono, a 500 Hz loudness
 // envelope (mean |x| over 16 samples), log-compressed and normalised, then
 // FFT cross-correlation; confidence = peak over the median |c|, sure from 8.
 import {ffmpegPath} from './ffmpeg-path';

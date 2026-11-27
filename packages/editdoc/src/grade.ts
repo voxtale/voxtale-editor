@@ -1,8 +1,8 @@
 // Colour grade of one source clip, on Lumetri's scales, compiled to a 3D LUT
 // (33 points a side) that the render applies to every frame of the clip.
 // Correction first (white balance, exposure), then at most a light look.
-// A subset of REDACTED's grade: no curves, hue mixer, secondaries, input
-// LUTs, vignette or grain. Pure: no I/O.
+// Kept small: no curves, hue mixer, secondaries, input LUTs, vignette or
+// grain. Pure: no I/O.
 import { z } from "zod";
 
 export type RGB = [number, number, number];

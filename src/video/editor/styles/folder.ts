@@ -1,4 +1,4 @@
-// Style folders: one per way of editing, as in REDACTED. The creator can read
+// Style folders: one per way of editing. The creator can read
 // and edit every file by hand.
 //   <root>/<slug>/style.json   look, brand, measured targets
 //   <root>/<slug>/rules.md     their rules in plain words, learned rules, measured ranges

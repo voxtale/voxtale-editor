@@ -1,8 +1,7 @@
 // Adapter: export timeline → Final Cut Pro 7 XML (xmeml v4), the format Adobe
 // Premiere Pro imports natively and DaVinci Resolve reads as "FCP 7 XML".
 // Units (Basic Motion, Crop, Audio Levels, Time Remap) were measured in
-// Premiere 26.5 by REDACTED (editor/src/premiere.ts); the Resolve variant
-// divides by Resolve's default "Scale entire image to fit" first.
+// Premiere 26.5; the Resolve variant divides by Resolve's default "Scale entire image to fit" first.
 import { fpsValue } from "./time";
 import { dbToVolume, keyValue, type ZoomKey } from "./render";
 import { placePicture, titleMarkers, zoomRect, type ExportClip, type ExportSource, type ExportTimeline, type Rect } from "./export-model";
@@ -16,14 +15,14 @@ export const xmemlPathUrl = (abs: string) => "file://localhost" + (/^[A-Za-z]:/.
   + abs.split(/[\\/]/).map((s, i) => (i === 0 && /^[A-Za-z]:$/.test(s) ? `${s[0]}%3a` : encodeURIComponent(s))).join("/");
 const rateXml = (fps: number) => `<rate><timebase>${Math.round(fps)}</timebase><ntsc>${Number.isInteger(fps) ? "FALSE" : "TRUE"}</ntsc></rate>`;
 
-/** Premiere's XML import clips Audio Levels above +12 dB (REDACTED, Premiere 26.5). */
+/** Premiere's XML import clips Audio Levels above +12 dB (Premiere 26.5). */
 const MAX_LEVEL = 3.98109;
 
 interface Motion { scale: number; horiz: number; vert: number }
 /**
  * Basic Motion for a source drawn at `rect` (canvas px). Scale 100 = source
  * pixels; centre = offset of the picture's middle from the canvas middle,
- * divided by the SOURCE size (REDACTED measured, Premiere 26.5).
+ * divided by the SOURCE size (measured in Premiere 26.5).
  */
 function motionOf(src: { width: number; height: number }, canvas: { width: number; height: number }, r: Rect, resolve: boolean): Motion {
   // Resolve first fits the source to the timeline, then applies the XML scale on top.
@@ -44,6 +43,7 @@ function motionFilter(keys: ({ frame: number } & Motion)[], inFrame: number): st
     + `</effect></filter>`;
 }
 
+// Percent of the source per edge.
 function cropFilter(c: { left: number; right: number; top: number; bottom: number }): string {
   if (!c.left && !c.right && !c.top && !c.bottom) return "";
   const p = (id: keyof typeof c) => `<parameter authoringApp="PremierePro"><parameterid>${id}</parameterid><name>${id}</name><valuemin>0</valuemin><valuemax>100</valuemax><value>${c[id]}</value></parameter>`;
@@ -56,6 +56,7 @@ const opacityFilter = (keys: { when: number; value: number }[]) =>
   + (keys.length > 1 ? keys.map(k => `<keyframe><when>${k.when}</when><value>${k.value}</value></keyframe>`).join("") : "")
   + `</parameter></effect></filter>`;
 
+// Linear gain, 1 = 0 dB.
 const levelFilter = (value: number, keys: { when: number; value: number }[]) =>
   `<filter><effect><name>Audio Levels</name><effectid>audiolevels</effectid><effectcategory>audiolevels</effectcategory><effecttype>audiolevels</effecttype><mediatype>audio</mediatype>`
   + `<parameter><parameterid>level</parameterid><name>Level</name><valuemin>0</valuemin><valuemax>${MAX_LEVEL}</valuemax><value>${value}</value>`
@@ -66,6 +67,7 @@ const levelFilter = (value: number, keys: { when: number; value: number }[]) =>
  * Constant speed as Premiere exports it: Time Remap at a fixed % plus its
  * graphdict table (clip frame → file frame).
  */
+// Ramps and reverse left out.
 function speedFilter(speed: number, mediaType: "video" | "audio", inF: number, frames: number, lo: number, hi: number, len: number, fileFrames: number): string {
   const kf = (when: number, value: number, flag: string) => `<keyframe><when>${when}</when><value>${value}</value><speedvirtualkf>TRUE</speedvirtualkf><${flag}>TRUE</${flag}></keyframe>`;
   const param = (id: string, value: string, range = "") => `<parameter authoringApp="PremierePro"><parameterid>${id}</parameterid><name>${id}</name>${range}<value>${value}</value></parameter>`;
@@ -80,7 +82,7 @@ function speedFilter(speed: number, mediaType: "video" | "audio", inF: number, f
 /**
  * Times (clip seconds) to key the zoom at. Premiere joins keys in straight
  * lines and an XML carries no curves, so eased moves are sampled every 2
- * frames; a hold jumps one frame before the next key (REDACTED's rule).
+ * frames; a hold jumps one frame before the next key.
  */
 function zoomTimes(keys: ZoomKey[], len: number, rate: number): number[] {
   const times = new Set<number>([0]);
@@ -123,7 +125,7 @@ export function toXmeml(t: ExportTimeline, opts: XmemlOptions = {}): AdapterOutp
       + `</media></file>`;
   };
 
-  /** in / out / duration as Premiere writes them, speed included (REDACTED `span`). */
+  /** in / out / duration as Premiere writes them, speed included. */
   const span = (c: ExportClip, s: ExportSource) => {
     const frames = c.end - c.start, M = fileFrames(s);
     if (s.kind === "image") return { inF: 0, len: M, lo: 0, hi: frames };
@@ -157,7 +159,7 @@ export function toXmeml(t: ExportTimeline, opts: XmemlOptions = {}): AdapterOutp
       ...motionOf(s, t.canvas, zoomRect(rect, t.canvas, keyValue(p.zoom, "scale", time, 1), keyValue(p.zoom, "position.x", time, 0), keyValue(p.zoom, "position.y", time, 0)), resolve),
     })).filter((k, i, all) => i === 0 || k.frame !== all[i - 1]!.frame);
     let out = motionFilter(keys, inF) + (boxed ? cropFilter(crop) : "");
-    // Opacity with picture fades: a fade of whole frames = 2 keys, the last on the clip's last frame (REDACTED opacityKeys).
+    // Opacity with picture fades: a fade of whole frames = 2 keys, the last on the clip's last frame.
     const n = c.end - c.start, o = p.opacity;
     const fi = Math.min(n, f(p.fadeIn ?? 0)), fo = Math.min(n - fi, f(p.fadeOut ?? 0));
     if (fi || fo || o < 1) {

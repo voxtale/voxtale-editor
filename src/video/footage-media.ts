@@ -89,7 +89,7 @@ export function makerLut(profile:string|undefined,dir=LUT_DIR):string|undefined 
 }
 
 // Darkest point of 3 frames (10-bit, video black = 0, white = 1), measured
-// by REDACTED on 160 DJI files: log >= 0.03 (except at night), normal <= 0.021.
+// on 160 DJI files: log >= 0.03 (except at night), normal <= 0.021.
 const BLACK=0.03;
 
 /** The log profile a brand's consumer cameras shoot; "Log" when there is no known conversion. */

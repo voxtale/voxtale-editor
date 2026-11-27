@@ -8,10 +8,6 @@ models/parakeet/ and are never fetched here: no model, a ``no-model:`` error.
 ``python -m voxtale_native asr`` reads {wav, models?} (a 16 kHz mono 16-bit
 WAV) and writes {engine, model, words: [{text, start, end, confidence}]},
 seconds from the WAV's start.
-
-Most of this is from REDACTED REDACTED/parakeet_cpu.py and
-REDACTED/transcribe.py (merge_tokens, split_glued, cuts, missed, segmented),
-translated; each part is marked.
 """
 
 from __future__ import annotations
@@ -26,6 +22,7 @@ from pathlib import Path
 import numpy as np
 
 RATE = 16000
+# CHUNK: cut every ~15 s at the quietest
 # spot within ±5 s. One hour at once does not fit in memory; 2-min pieces let a
 # quiet voice drift into the wrong language with minutes of missing words.
 CHUNK = 15
@@ -33,6 +30,7 @@ CHUNK = 15
 SHERPA_NAME = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
 MLX_NAME = "parakeet-tdt-0.6b-v3-mlx"
 REPO_MODELS = Path(__file__).resolve().parent.parent / "models" / "parakeet"
+# MLX_RESERVE: MLX keeps freed memory for
 # reuse; capped at 256 MB peak use fell from 5.9 to 3.4 GB, same speed and words.
 MLX_RESERVE = 256 * 2**20
 

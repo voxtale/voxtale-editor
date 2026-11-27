@@ -99,7 +99,7 @@ const same=(x:Timed,y:Timed)=>Math.min(x.end,y.end)-Math.max(x.start,y.start)>0.
  * Words read on [a,b) (file time) replace the ones there; a word belongs to
  * the pass its midpoint falls in. At a seam the same word read a little apart
  * by two reads comes out once, never twice or not at all (60 ms apart was
- * enough to double it). from REDACTED REDACTED/transcribe.py merge_pass.
+ * enough to double it).
  */
 export function mergePass<W extends Timed>(words:W[],fresh:W[],a:number,b:number):W[] {
   const inside=fresh.filter(n=>a<=mid(n)&&mid(n)<b);

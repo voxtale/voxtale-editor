@@ -1,3 +1,4 @@
+// from github.com/xikhar/papercraft examples/built-ground.js (MIT; see LICENSE)
 // papercraft / examples / built-ground.js
 // WORKED EXAMPLES of the built-ground recipes in references/mechanisms.md section 14 (three.js), not a parts library:
 // how one world built its cottage (on the core boxFold), a bridge, a terrace, stairs and a ramp from cards, each with

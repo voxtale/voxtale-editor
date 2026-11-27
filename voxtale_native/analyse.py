@@ -2,7 +2,6 @@
 # requires-python = ">=3.10"
 # dependencies = ["numpy", "scipy"]
 # ///
-# voice separation, strips and spectrograms left out; hardware decode dropped)
 """Measure the editing style of reference videos: speech, cuts and zooms,
 sound, picture look, and contact sheets the agent looks at to write the style.
 All on this machine, no model, no tokens. The numbers are orders of magnitude:

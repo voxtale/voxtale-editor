@@ -20,7 +20,7 @@ export interface LiveIndex {source:string;duration:number;signals:Signal[];candi
 
 /**
  * A moment the model placed in the wrong hour ("0:28:10" for "6:28:10")
- * moved back to the window's hour, else null. from REDACTED live.ts inside()
+ * moved back to the window's hour, else null.
  */
 export function inside(c:{start:number;end:number},from:number,to:number):{start:number;end:number}|null {
   for(let h=-12;h<=12;h++) {

@@ -1,5 +1,6 @@
+// from github.com/xikhar/papercraft stage.js (MIT; see LICENSE)
 // papercraft / stage.js — the harness of templates/popup-3d/harness.js (github.com/xikhar/papercraft, MIT, see LICENSE),
-// adapted for REDACTED: drawn on a given canvas at the video's size, no input, no walking, no sound, no real-time loop.
+// adapted for video: drawn on a given canvas at the video's size, no input, no walking, no sound, no real-time loop.
 // The video's frame drives it: seek(seconds) replays the fixed 60 Hz clock from t = 0 (restart) or steps forward, then
 // renders, so the preview and the export show the same image. Use it through PaperStage (../paper.tsx).
 import * as THREE from 'three';
@@ -314,7 +315,7 @@ export function createStage({ canvas, width = 1920, height = 1080, ss = 1, test 
   const H = { THREE, P2, flags, renderer, scene, camera, paper, view, target, walk, hinges, spots, bounds, heroHeight, groundAt, stack, dome,
     printGround, popup, printed, cardOpts, inFrame, inReach, walkArea, sharpAt, lamp, glowing, hero: null, stepHooks: [], onStep: (fn) => H.stepHooks.push(fn), restartHooks: [], onRestart: (fn) => H.restartHooks.push(fn), setHero: (h, { stride = null } = {}) => { H.hero = h; H.heroStride = stride; }, heroWalk, start };
 
-  // ---- a hero to follow (REDACTED): a scripted walk the video's clock drives ----------------------------------------
+  // ---- a hero to follow: a scripted walk the video's clock drives ---------------------------------------------------
   /**
    * heroWalk(points, { follow, lead, smooth }): the hero (setHero) walks through points [{ at, x, z }] (seconds of the
    * scene, ground units), at an even pace between two times, and stands still before the first, after the last, and

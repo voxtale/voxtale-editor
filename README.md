@@ -5,11 +5,6 @@ loopback URL (`http://127.0.0.1:7820/mcp`) or over stdio, for Claude Code,
 Codex, Cursor or any MCP client, against a folder of clips on your
 machine. No account, no cloud service, no web app.
 
-> **Private.** Some code and prompt text here was copied from REDACTED and
-> carries a `// from REDACTED <file>` mark (see
-> `src/video/editor/agent/THIRD_PARTY_NOTICES.md`). Replace every marked
-> part before any public release.
-
 ## Quick start
 
 Mac:
@@ -51,7 +46,7 @@ Staged CLI workflow: [docs/usage.md](docs/usage.md).
 | `voxtale_native/` | Python face finder (OpenCV YuNet) and subject mask (U2-Net-p, for text behind the speaker); `models/` holds both models (in git) |
 | `tests/` | Unit tests (`bun test tests`) |
 | `bench/agenticvbench/` | Bench harness scripts only (no results, no media) |
-| `docs/` | Design notes, research, REDACTED comparisons |
+| `docs/` | Design notes and research |
 
 ## Develop
 

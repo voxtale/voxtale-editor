@@ -7,7 +7,7 @@ import {fadeFields,type Fade,type Job} from './cut';
 
 export const LOGO_CORNERS=['top-left','top-right','bottom-left','bottom-right'] as const;
 export type LogoCorner=(typeof LOGO_CORNERS)[number];
-/** Gap from the frame edge for a corner logo, share of the short side. REDACTED's corner label inset. */
+/** Gap from the frame edge for a corner logo, share of the short side. */
 const MARGIN=0.04;
 
 export interface LogoPlacement {

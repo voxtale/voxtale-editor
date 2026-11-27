@@ -1,3 +1,4 @@
+// from github.com/xikhar/papercraft lib/paper-motion.js (MIT; see LICENSE)
 // papercraft / paper-motion.js
 // Engine-free motion for paper: springs, the latched paper-flap spring, wind sway as a pure function of time and
 // place, a fixed-step clock, and the walk field (what the hero may walk on, read from the built constructions). No dependencies; used by paperkit-3d.js and the 2D template, portable to any engine.

@@ -1,7 +1,7 @@
 // Gate for agent-written Remotion scenes, run before any render: the static
 // gate (allow-listed imports, no network, clock, DOM or eval), then a strict
-// TypeScript check against the scene kit and the SceneModule shape, as
-// REDACTED checks its agent-written animations before use.
+// TypeScript check against the scene kit and the SceneModule shape, so an
+// agent-written animation is checked before use.
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import ts from 'typescript';

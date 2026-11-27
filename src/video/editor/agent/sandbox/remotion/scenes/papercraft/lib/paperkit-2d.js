@@ -1,3 +1,4 @@
+// from github.com/xikhar/papercraft lib/paperkit-2d.js (MIT; see LICENSE)
 // papercraft / paperkit-2d.js
 // Procedural paper for Canvas 2D: paper sheets, normal maps, cut-paper outlines and printed marks.
 // No dependencies, deterministic (every function takes a seed or an rng). Works in any browser canvas and

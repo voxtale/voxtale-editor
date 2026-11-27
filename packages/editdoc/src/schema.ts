@@ -48,7 +48,7 @@ export const beatsSchema = z.object({
   /** Seconds into the file where the track comes alive (past the intro): the default music in-point. */
   livelyFrom: z.number().finite().nonnegative().optional(),
 }).strict();
-/** Below this beat confidence, picture changes do not snap to the beat. REDACTED's ~0.4. */
+/** Below this beat confidence, picture changes do not snap to the beat. */
 export const BEAT_CONFIDENCE_MIN = 0.4;
 export type ClipBeats = z.infer<typeof beatsSchema>;
 

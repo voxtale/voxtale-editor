@@ -27,18 +27,23 @@ export const templateSchema=z.discriminatedUnion('kind',[
   z.object({kind:z.literal('compare'),place:z.enum(['lower','center','full']).default('lower'),
     left:z.object({label:z.string().max(24),points:z.array(line).max(3).default([])}),
     right:z.object({label:z.string().max(24),points:z.array(line).max(3).default([]),word:beat})}),
+  // A section title card; motion per skill pro-motion §5.
   z.object({kind:z.literal('title'),place:z.enum(['full','lower','center']).default('full'),kicker:z.string().max(40).optional().describe('e.g. "Part 2"'),
     text:z.string().min(1).max(60).describe('the section title, the speaker\'s own words, sentence case'),
     sub:z.string().max(80).optional(),subWord:beat.optional()}),
   z.object({kind:z.literal('flow'),place:z.enum(['lower','top','full']).default('lower'),kicker:z.string().max(40).optional(),
     steps:z.array(z.object({text:z.string().min(1).max(24),word:beat})).min(2).max(4)}),
+  // A word underlined in felt pen.
   z.object({kind:z.literal('marked'),place:place.default('lower'),kicker:z.string().max(40).optional(),
     text:z.string().min(1).max(60).describe('the headline, up to ~6 words'),
     mark:z.number().int().min(0).max(9).describe('which word of text to underline, 0 = first'),word:beat.optional().describe('spoken word the stroke lands on')}),
+  // A title that becomes a corner label.
   z.object({kind:z.literal('chapter'),place:z.literal('center').default('center').describe('always over the speaker; it parks in corner'),corner:z.enum(['top-left','top-right']).default('top-left'),kicker:z.string().max(40).optional().describe('e.g. "Part 2"'),
     text:z.string().min(1).max(40).describe('the section title, short, sentence case'),word:beat.optional().describe('spoken word where it leaves for the corner')}),
+  // Cards dealt onto a pile.
   z.object({kind:z.literal('cards'),place:z.enum(['left','right','center']).default('center'),kicker:z.string().max(40).optional(),
     cards:z.array(z.string().min(1).max(32)).min(3).max(8).describe('short examples, one per card'),word:beat.optional().describe('spoken word the first card lands on')}),
+  // Text on the beat.
   z.object({kind:z.literal('beatWords'),place:place.default('lower'),
     words:z.array(z.object({text:z.string().min(1).max(20),word:beat})).min(2).max(8).describe('the line, one entry per word; each lights on its spoken word')}),
 ]);
@@ -80,22 +85,22 @@ const CSS=`
 .step{display:flex;align-items:center;gap:calc(var(--u)*16);font-size:calc(var(--u)*46);font-weight:700;white-space:nowrap}
 .link{position:relative;width:calc(var(--u)*90);height:calc(var(--u)*6);margin:0 calc(var(--u)*22);border-radius:calc(var(--u)*3);background:rgba(255,255,255,.15);overflow:hidden}
 .link>i{position:absolute;inset:0;background:var(--accent);transform-origin:0 50%}
-/* from REDACTED RECIPES.md §2: felt-pen stroke under the word, 0.12 em thick, slanted like italic. */
+/* Felt-pen stroke under the word, 0.12 em thick, slanted like italic. */
 .mk{position:relative;display:inline-block}
 .pen{position:absolute;left:-4%;width:108%;bottom:-.14em;height:.32em;transform:skewX(-10deg);overflow:visible;filter:drop-shadow(0 0 calc(var(--u)*10) var(--accent))}
 .pen path{fill:none;stroke:var(--accent);stroke-width:.12em;stroke-linecap:round;vector-effect:non-scaling-stroke}
-/* from REDACTED RECIPES.md §3: the title parks in a corner as a label. */
+/* The title parks in a corner as a label. */
 .chap{position:absolute;top:calc(var(--u)*48);display:flex;flex-direction:column;gap:calc(var(--u)*10)}
 .chap.top-left{left:calc(var(--u)*60);transform-origin:0 0}
 .chap.top-right{right:calc(var(--u)*60);transform-origin:100% 0;align-items:flex-end}
 .chap .kt{max-width:none;flex-wrap:nowrap;text-shadow:0 calc(var(--u)*4) calc(var(--u)*24) rgba(0,0,0,.55)}
-/* from REDACTED RECIPES.md §5: a pile of cards. */
+/* A pile of cards. */
 .pile{position:absolute;top:50%;width:calc(var(--u)*620);height:calc(var(--u)*300);transform:translateY(-50%)}
 .pile.center{left:calc(50% - var(--u)*310)}.pile.left{left:calc(var(--u)*110)}.pile.right{right:calc(var(--u)*110)}
 .pile .kicker{position:absolute;top:calc(var(--u)*-70);left:0}
 .card{position:absolute;inset:0;border-radius:calc(var(--u)*26);background:#f5f6fa;color:#0c0e14;display:grid;place-items:center;padding:calc(var(--u)*30);
   font-size:calc(var(--u)*52);font-weight:800;text-align:center;box-shadow:0 calc(var(--u)*18) calc(var(--u)*50) rgba(0,0,0,.4)}
-/* from REDACTED RECIPES.md §9: each word lights on its beat; nothing moves. */
+/* Each word lights on its beat; nothing moves. */
 .beat{display:flex;flex-wrap:wrap;column-gap:.28em;font-size:calc(var(--u)*72);font-weight:800;max-width:calc(var(--u)*1400)}
 /* Beside the speaker, wide layouts stack. */
 .side.cmp{flex-direction:column;gap:calc(var(--u)*22)}
@@ -225,6 +230,7 @@ export function templateHtml(t0:Template,o:{width:number;height:number;seconds:n
       break;
     }
     case 'title': {
+      // A standard title reveals in 1.77 s, a linear sweep;
       // words rise ~100% of their height; the title rises into place on glide; new text arrives in the accent and cools.
       const words=t.text.split(/\s+/).filter(Boolean);
       const room=(p==='full'?1500/FULL_SCALE:1500)-PANEL_PAD;
@@ -255,6 +261,7 @@ export function templateHtml(t0:Template,o:{width:number;height:number;seconds:n
       break;
     }
     case 'marked': {
+      // The title lands, then 4-8 frames later a hand stroke draws under one word in 0.33 s (glide, no bounce).
       const words=t.text.split(/\s+/).filter(Boolean),mk=Math.min(t.mark,words.length-1);
       const room=(side?sideRoom(p as 'left'|'right',o.face)*1920:p==='full'?1500/FULL_SCALE:1500)-PANEL_PAD;
       const size=Math.round(Math.min(80,room/(0.62*Math.max(...words.map(w=>w.length)))));
@@ -268,6 +275,7 @@ export function templateHtml(t0:Template,o:{width:number;height:number;seconds:n
       break;
     }
     case 'chapter': {
+      // Hold the title centred >= 0.6 s, then one swing curve (0.95 s) carries it to the
       // corner and shrinks it to a label about 48 px tall at 1080 (never under ~32 px).
       const words=t.text.split(/\s+/).filter(Boolean);
       const size=Math.round(Math.min(110,1500/(0.62*Math.max(4,t.text.length*0.9))));
@@ -284,6 +292,7 @@ export function templateHtml(t0:Template,o:{width:number;height:number;seconds:n
       break;
     }
     case 'cards': {
+      // Each card flies in on flowIn (X and Y on their own curves, so it arcs) to the pile;
       // the gap tightens from 0.27 s to 0.1 s like a deal speeding up, then everything holds still >= 0.5 s.
       const n=t.cards.length,trip=1;
       body=`<div class="pile ${t.place}" id="g">${kicker(t.kicker)}${t.cards.map((c,i)=>`<div class="card" id="c${i}" style="transform:rotate(${((i*37)%11-5)*.9}deg)">${esc(c)}</div>`).join('')}</div>`;
@@ -298,6 +307,7 @@ export function templateHtml(t0:Template,o:{width:number;height:number;seconds:n
       break;
     }
     case 'beatWords': {
+      // The spoken word lights in the accent and returns to colour in 14 frames (glide,
       // no overshoot); a beat closer than that returns faster so the line never shivers. Nothing moves.
       const times=t.words.map((w,i)=>at(w.word,.5+i*.4));
       body=`<div class="panel ${t.place}" id="g"><div class="edge"></div><div class="beat">${t.words.map((w,i)=>`<span id="b${i}">${esc(w.text)}</span>`).join('')}</div></div>`;
