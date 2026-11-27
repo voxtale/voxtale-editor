@@ -33,6 +33,7 @@ import {serveHttp} from './http';
 import {EDITDOC_GUIDE,editingGuide,SERVER_INSTRUCTIONS} from './guide';
 import {styleTools} from './style-tools';
 import {labelTools} from './label-tools';
+import {liveTools} from './live-tools';
 import {visionMode} from './vision-mode';
 import {stylesRoot} from '../styles/folder';
 import {migrateGlobalRules} from '../styles/style-rules';
@@ -234,6 +235,7 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
           ...(lost.length?['not carried:',...lost]:['everything in the edit carried']),
           ...(missing.length?[`missing on disk (the editor will ask for them): ${missing.join(', ')}`]:[])].join('\n')};
       }},
+    ...liveTools({folderOf,faces:async()=>(await portsOf()).faces,load:a=>load(a),current}),
     ...styleTools({root,current:()=>open&&at?{ws:open.ws,keep:()=>keepProject(at!,open!.p,open!.ws)}:undefined}),
     ...(harness?labelTools({current:()=>open&&at?{dir:at.dir,ws:open.ws,keep:()=>keepProject(at!,open!.p,open!.ws)}:undefined,
       changed:()=>notify()('notifications/tools/list_changed',{})}):[]),
