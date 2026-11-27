@@ -87,6 +87,17 @@ tools/fetch-parakeet.sh --onnx   # the CPU model (also for VOXTALE_EDITOR_ASR=cp
 `open` prints which engine ran for each talk clip. A saved transcript is
 reused whatever the engine.
 
+### Optional extras
+
+- Object picks (text behind a lamp, or behind the head alone):
+  `tools/fetch-object-model.sh` fetches MobileSAM (44 MB, sha256-checked);
+  needs `onnxruntime` from `requirements.txt`. Without it `pick_object`
+  says so.
+- Clips from links and live URLs: `download` and `live_scan` need
+  [yt-dlp](https://github.com/yt-dlp/yt-dlp) for video pages
+  (`brew install yt-dlp`, or `pip install yt-dlp`). Plain https files need
+  nothing.
+
 ### Keys
 
 For AssemblyAI only: put `ASSEMBLYAI_API_KEY=…` in `.env` in the repo
@@ -248,6 +259,11 @@ For a locked render (Docker, network off), build the sandbox image:
 | `VOXTALE_EDITOR_PYTHON`, `VOXTALE_EDITOR_UV` | Python interpreter (default the repo's `.venv`) / uv binary |
 | `VOXTALE_REMOTION_IMAGE`, `VOXTALE_HF_IMAGE` | Sandbox image tags |
 | `VOXTALE_EDITOR_SKIP_SETUP=1` | Skip setup during `bun install` |
+| `VOXTALE_EDITOR_TRANSCRIBE` | Transcription engine: `auto` (default; local Parakeet when its model is there), `local`, `assemblyai` (paid) |
+| `VOXTALE_EDITOR_ASR` | `cpu` makes a Mac use the ONNX model instead of MLX |
+| `VOXTALE_EDITOR_ENCODER` | Video encoder: `auto` (default; VideoToolbox, NVENC, QSV, AMF or MF after a test encode, else libx264), `software`, or an ffmpeg encoder name |
+| `VOXTALE_EDITOR_VERSION_IDLE` | Seconds of quiet after which the next change keeps a version first (default 600) |
+| `VOXTALE_YTDLP` | yt-dlp binary for `download` and `live_scan` URLs (default `yt-dlp` on the PATH) |
 
 ## What it offers
 
@@ -271,6 +287,21 @@ For a locked render (Docker, network off), build the sandbox image:
   look you edit in, in `~/.voxtale-editor/styles`. When you say "always" or
   "from now on", the editor proposes a rule; say yes, reword it or say no,
   and your agent records it with `decide_rule`.
+- Frame and tracking: `set_frame` (9:16, 1:1, 4:5; the crop follows the
+  speaker), `track_title` (pin a text or graphic to a spot in the set).
+- Object picks: `pick_object`, then `maskObjects` on `place_graphic`.
+- Versions: `new_version`, `versions`, `restore_version`, `trash`; the server
+  also keeps a version on the first change after open, resume or a pause.
+  `timeline` reads the cut as text; `find_words` gives output seconds of a
+  phrase.
+- Sound: `clean` on set_cut segments cuts pauses and hesitations by measured
+  level; `make_sfx` makes effects here from recipes; `transcribe_sequence`
+  transcribes only what the cut plays.
+- Lives: `live_scan`, `live_candidates`, `live_rate`, `live_make_clip`,
+  `live_layout` turn a finished livestream into 9:16 clips.
+- `download`: a file or a clip of a video page from a link you give.
+  `render` uses the machine's hardware encoder; `fast: true` also
+  stream-copies untouched passages (off by default).
 - Resources: `editdoc://guide`, `editdoc://schema`, `editdoc://current`.
 - Prompt: `edit-video`.
 

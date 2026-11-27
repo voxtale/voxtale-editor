@@ -1,12 +1,12 @@
-// Agent text for picked objects in the subject mask (bd voxtale-editor-8a6). Not yet in a registered skill
-// version: the coordinator folds OBJECT_MASK_SKILL into the next one. Tool descriptions are live now.
+// Agent text for picked objects in the subject mask (bd voxtale-editor-8a6). OBJECT_MASK_SKILL is in skill v30
+// (skill.ts). Tool descriptions are live.
 // Idea and add/remove semantics from REDACTED REDACTED/subject_objects.py (Premiere's Object Mask + and −).
 
 export const PICK_OBJECT_DESCRIPTION='Pick objects on one still of a clip, for text behind them: mode add puts the object over a graphic (a lamp, a mug, the head alone), mode remove cuts it out of the mask (a raised hand that should stay behind the text). Give points on the object (fractions of the SOURCE frame, as timeline_view shows it), a box round it, or both; exclude points mark what is not the object (the shirt under a mug). Returns the still with each object tinted, outlined and numbered, and per object its share of the frame and box: check the tint covers the object and nothing else, and pick again (more points, a tighter box, an exclude point) until it does. Then pass the same objects, with clip and t, as maskObjects to place_graphic. Needs the object model; without it this fails and says so.';
 
 export const MASK_OBJECTS_FIELD='objects picked with pick_object (same mode, points, exclude, box; plus the clip and the source second t of the still they were picked on), added to the mask drawn back over the graphic or cut out of it. They are followed across frames both ways from t. An added object puts the graphic behind it even without behindSubject: behindSubject false with the head picked = text behind the head only. Objects on a clip the graphic does not cover do nothing';
 
-/** Skill text, for the next skill version. */
+/** Skill v30: after Text behind the speaker. */
 export const OBJECT_MASK_SKILL=`
 ### Text behind an object, or behind the head
 behindSubject cuts the whole person out over a graphic. For anything else, pick objects:

@@ -1,6 +1,6 @@
 // Agent text for edit versions, the text timeline and find_words (bd
-// voxtale-editor-evf, -5fe, -5ot). Not in a skill version yet: the
-// coordinator folds VERSIONS_TIMELINE_SKILL_TEXT into the next one.
+// voxtale-editor-evf, -5fe, -5ot). VERSIONS_TIMELINE_SKILL_TEXT is in
+// skill v30 (skill.ts).
 
 export const TIMELINE_DESCRIPTION='The edit as text, one line per item per track (captions and text on top, then graphics, zoom, footage, speaker, sound): id, what it shows (clip and the words it plays), output start → end, source in, and the settings that matter (speed, crop, layout, gain, J/L, transitions, fades, variants, CREATOR for the creator\'s own items). at: only what sits under that output second, with the source second each clip plays there (what a note at 1:23 is about). tracks: only those tracks. Cheap: use it instead of reading edit.json, and before each touch-up. timeline_view is different: it looks at source footage.';
 
@@ -14,7 +14,7 @@ export const RESTORE_VERSION_DESCRIPTION='Go back to an earlier version ("the cu
 
 export const TRASH_DESCRIPTION='Send what you tried and dropped to the system Trash (recoverable from there): versions by number (never the working one), and/or scratch: true for the preview stills watch_cut and sheet left in .edit/. Footage, transcripts and renders are never touched. Use it once your answer is ready, for tries the creator will not want back.';
 
-/** For the next skill version: a section after the workflow steps. */
+/** Skill v30: a section after the workflow steps. */
 export const VERSIONS_TIMELINE_SKILL_TEXT=`### Versions and reading the cut
 - Each creator request that changes the edit starts with \`new_version\` (a note on what it is for); the edit before it stays as a version. \`versions\` lists them; \`restore_version\` brings one back as the next version, so going back never loses work.
 - Tries you drop on the way: \`trash\` them once your answer is ready. Never the working version.

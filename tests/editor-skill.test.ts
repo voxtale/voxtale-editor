@@ -1,4 +1,4 @@
-// Skill v29 wiring, and the registry check: every tool the skill or the local
+// Skill v29/v30 wiring, and the registry check: every tool the skill or the local
 // guide names is registered with the agent or served by the local MCP.
 import {describe,expect,test} from 'bun:test';
 import {clipRefSchema} from '@voxtale/editdoc';
@@ -20,6 +20,7 @@ function agentTools():Set<string> {
     {ref:ref('m','c',{role:'music',kind:'audio'}),words:[]}],sync:[]};
   const ws:any=newWorkspace({dir:'/tmp/skill-v29',job,frames:{} as any,graphics:true});
   ws.syncGroups={groups:[{id:'g'}]};
+  ws.picker=async()=>[];ws.media={};   // the object model and local media switch on pick_object, make_sfx, transcribe_sequence
   return new Set(editorTools(ws).map(t=>t.name));
 }
 async function served(vision:null|undefined):Promise<string[]> {
@@ -30,12 +31,21 @@ async function served(vision:null|undefined):Promise<string[]> {
 const NOT_TOOLS=new Set(['screen_synced']);
 const named=(text:string)=>[...new Set(text.match(/\b[a-z]+(?:_[a-z]+)+\b/g)??[])].filter(n=>!NOT_TOOLS.has(n));
 
-describe('skill v29',()=>{
-  test('is the active editor skill, on top of v28',()=>{
-    expect(listPrompts().find(p=>p.id===AGENT_SKILL_PROMPT_ID)?.active).toBe(29);
-    expect(promptText(AGENT_SKILL_PROMPT_ID)).toBe(promptTextVersion(AGENT_SKILL_PROMPT_ID,29));
-    expect(promptTextVersion(AGENT_SKILL_PROMPT_ID,29)).not.toBe(promptTextVersion(AGENT_SKILL_PROMPT_ID,28));
-    expect(promptText(AGENT_SKILL_PROMPT_ID)).toContain('place_logo');
+describe('skill v30',()=>{
+  test('is the active editor skill, on top of v29, which stays registered',()=>{
+    expect(listPrompts().find(p=>p.id===AGENT_SKILL_PROMPT_ID)?.active).toBe(30);
+    expect(promptText(AGENT_SKILL_PROMPT_ID)).toBe(promptTextVersion(AGENT_SKILL_PROMPT_ID,30));
+    const v29=promptTextVersion(AGENT_SKILL_PROMPT_ID,29);
+    expect(v29).not.toBe(promptTextVersion(AGENT_SKILL_PROMPT_ID,28));
+    expect(v29).toContain('place_logo');
+    expect(v29).not.toContain('pick_object');
+  });
+  test('carries every W22 section',()=>{
+    const t=promptText(AGENT_SKILL_PROMPT_ID);
+    for(const tool of ['set_frame','track_title','live_scan','live_make_clip','pick_object','new_version','restore_version','timeline','find_words','download','make_sfx','trash'])
+      expect(t).toContain(tool);
+    for(const h of ['### Versions and reading the cut','### Clean by level','### Frame shape and motion tracking','### Text behind an object','## A finished livestream','### Where sounds come from','## Transcription','## Media from a link','## Render speed'])
+      expect(t).toContain(h);
   });
   test('the local guide carries it',()=>{
     expect(editingGuide(true,false).startsWith(promptText(AGENT_SKILL_PROMPT_ID))).toBe(true);
@@ -49,12 +59,13 @@ describe('tool registry',()=>{
     for(const text of [promptText(AGENT_SKILL_PROMPT_ID),editingGuide(true,false),editingGuide(true,true),SERVER_INSTRUCTIONS])
       expect(named(text).filter(n=>!all.has(n))).toEqual([]);
     for(const t of ['label_footage','save_labels'])expect(harness).toContain(t);
-    for(const t of ['set_angles','set_av_offset','place_logo'])expect(agent.has(t)).toBe(true);
+    for(const t of ['set_angles','set_av_offset','place_logo','set_frame','track_title','pick_object','find_words','timeline','make_sfx','transcribe_sequence'])expect(agent.has(t)).toBe(true);
+    for(const t of ['live_scan','live_candidates','live_rate','live_make_clip','live_layout','new_version','versions','restore_version','trash','download'])expect(all.has(t)).toBe(true);
   });
   test('the local MCP serves every agent tool that needs no footage',async()=>{
     const list=new Set(await served(null));
-    // With no project open the footage-only tools (moments, music, other video, angles) wait for open.
-    const waiting=new Set(['find_footage','screen_activity','set_music','survey_clips','rank_candidates','show_footage','set_angles']);
+    // With no project open the footage-only tools (moments, music, other video, angles, object picks, local media) wait for open.
+    const waiting=new Set(['find_footage','screen_activity','set_music','survey_clips','rank_candidates','show_footage','set_angles','pick_object','make_sfx','transcribe_sequence']);
     expect([...agentTools()].filter(n=>!waiting.has(n)&&!list.has(n))).toEqual([]);
   });
 });

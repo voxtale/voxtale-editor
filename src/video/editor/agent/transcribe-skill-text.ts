@@ -1,5 +1,5 @@
-// Agent-facing text for local transcription (bd voxtale-editor-ypi). Not in a
-// skill version yet: the coordinator folds it into the next one (./skill.ts).
+// Agent-facing text for local transcription (bd voxtale-editor-ypi).
+// TRANSCRIBE_SKILL_TEXT is in skill v30 (./skill.ts); OPEN_TRANSCRIBE_NOTE is in the open tool.
 
 /** Replaces "transcribes speech (about 1 min per 10 min of speech)" in the open tool's description. */
 export const OPEN_TRANSCRIBE_NOTE='transcribes speech on this machine with Parakeet (free, no key; slower on a CPU than on Apple Silicon), or with AssemblyAI when the server is set to (VOXTALE_EDITOR_TRANSCRIBE=assemblyai, paid)';

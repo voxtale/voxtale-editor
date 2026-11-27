@@ -19,8 +19,8 @@ the style; what they want in or out.
 
 1. \`open\` with every file and its role. Roles: talk, voiceover, broll,
    screen, screen_synced (a screen recorded together with the speaker),
-   music, sfx. It transcribes speech (about 1 min per 10 min of speech) and
-   lists the clips, with any that share the speaker's clock. Opening again
+   music, sfx. It transcribes speech (on this machine, free, unless the
+   server is set to AssemblyAI) and lists the clips, with any that share the speaker's clock. Opening again
    starts over; \`resume\` continues an edit already in the folder.
 ${labels?`
    It also labels each b-roll and screen clip with a vision model, as the

@@ -10,6 +10,13 @@ import {NOTES_SKILL_TEXT} from './skill-notes';
 import {PIXEL_FONT_NOTE} from './setup-skill-text';
 import {LOGO_SKILL_TEXT,TEMPLATES_SKILL_TEXT} from './logo-templates-skill-text';
 import {STYLE_SKILL_TEXT} from '../styles/agent-text';
+import {TRACK_SKILL_TEXT} from './track-skill-text';
+import {OBJECT_MASK_SKILL} from './object-mask-skill';
+import {VERSIONS_TIMELINE_SKILL_TEXT} from './versions-timeline-skill-text';
+import {LEVELS_SKILL_TEXT,SFX_RECIPES_SKILL_TEXT} from './levels-sfx-skill-text';
+import {TRANSCRIBE_SKILL_TEXT} from './transcribe-skill-text';
+import {LIVE_SKILL_TEXT} from '../../live/skill-text';
+import {DOWNLOAD_AND_EXPORT_SKILL_TEXT} from '../local-mcp/download-text';
 
 const SKILL_V20=`# VoxTale editor
 
@@ -1079,4 +1086,49 @@ pass it as \`inputLut\`.`],
   not part of a graphic.`],
 ];
 
-export const AGENT_SKILL_PROMPT_ID=registerPrompt('video.agent-editor',{20:SKILL_V20,21:SKILL_V21,22:SKILL_V22,23:withMechanics(SKILL_V22),24:SKILL_V24,25:SKILL_V25,26:withEdits(SKILL_V25,FINISH_TOOLS_V26),27:SKILL_V27,28:SKILL_V28,29:withEdits(SKILL_V28,MERGE_V29)});
+/**
+ * v30: W22 REDACTED-parity branches. Edit versions, the text timeline and
+ * find_words; clean by level; frame shape (set_frame) and motion tracking
+ * (track_title); objects in the subject mask (pick_object, maskObjects);
+ * finished lives to vertical clips (live_*); where sounds come from
+ * (make_sfx); local transcription; download and render speed (fast opt-in).
+ */
+const MERGE_V30:[old:string,text:string][]=[
+  [`## The creator's own edits
+`,`${VERSIONS_TIMELINE_SKILL_TEXT}
+## The creator's own edits
+`],
+  [`## Rhythm
+`,`${LEVELS_SKILL_TEXT}
+## Rhythm
+`],
+  [`## Transitions
+`,`${TRACK_SKILL_TEXT}
+## Transitions
+`],
+  [`### Brand logo
+`,`${OBJECT_MASK_SKILL.trimStart()}
+### Brand logo
+`],
+  [`## Several cameras or mics
+`,`${LIVE_SKILL_TEXT}
+
+## Several cameras or mics
+`],
+  [`## Colour
+`,`${SFX_RECIPES_SKILL_TEXT}
+## Colour
+`],
+  [`## Creator notes
+`,`${TRANSCRIBE_SKILL_TEXT}
+
+## Creator notes
+`],
+  [`## Finish
+`,`${DOWNLOAD_AND_EXPORT_SKILL_TEXT}
+
+## Finish
+`],
+];
+
+export const AGENT_SKILL_PROMPT_ID=registerPrompt('video.agent-editor',{20:SKILL_V20,21:SKILL_V21,22:SKILL_V22,23:withMechanics(SKILL_V22),24:SKILL_V24,25:SKILL_V25,26:withEdits(SKILL_V25,FINISH_TOOLS_V26),27:SKILL_V27,28:SKILL_V28,29:withEdits(SKILL_V28,MERGE_V29),30:withEdits(withEdits(SKILL_V28,MERGE_V29),MERGE_V30)});

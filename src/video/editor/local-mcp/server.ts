@@ -33,6 +33,7 @@ import {jobTools,newWorkspace} from '../agent/session';
 import type {Workspace} from '../agent/tools';
 import {serveHttp} from './http';
 import {EDITDOC_GUIDE,editingGuide,SERVER_INSTRUCTIONS} from './guide';
+import {OPEN_TRANSCRIBE_NOTE} from '../agent/transcribe-skill-text';
 import {styleTools} from './style-tools';
 import {labelTools} from './label-tools';
 import {liveTools} from './live-tools';
@@ -153,7 +154,7 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
     {name:'editing_guide',description:'How to edit well with these tools: workflow, cutting, rhythm, zoom, captions, footage. Read it before the first edit.',
       input:{},run:async()=>({text:guide()})},
 
-    {name:'open',description:'Start an edit from footage files: reads each file, transcribes speech (about 1 min per 10 min of speech), labels b-roll and screen clips with a vision model when the server has one (for find_footage; a few cents per minute of footage, kept for the next open; else label_footage hands them to you) and opens the project in <folder>/.edit/. Starts over if an edit is already there (use resume to continue it). Roles: talk (the speaker on camera), voiceover (sound only; the picture is your footage), broll, screen, screen_synced (a screen recorded together with the speaker), music, sfx. The clips in the cut set the picture\'s shape: a speaker in it, else the shape with the most screen time. A talk clip with no spoken words opens as broll, with a warning. Lists the clips when done. '+OPEN_MEDIA_NOTE,
+    {name:'open',description:'Start an edit from footage files: reads each file, '+OPEN_TRANSCRIBE_NOTE+', labels b-roll and screen clips with a vision model when the server has one (for find_footage; a few cents per minute of footage, kept for the next open; else label_footage hands them to you) and opens the project in <folder>/.edit/. Starts over if an edit is already there (use resume to continue it). Roles: talk (the speaker on camera), voiceover (sound only; the picture is your footage), broll, screen, screen_synced (a screen recorded together with the speaker), music, sfx. The clips in the cut set the picture\'s shape: a speaker in it, else the shape with the most screen time. A talk clip with no spoken words opens as broll, with a warning. Lists the clips when done. '+OPEN_MEDIA_NOTE,
       input:{folder:folderArg,
         files:z.array(z.object({path:z.string().describe('absolute, or relative to folder'),role:z.enum(Object.keys(ROLES) as [string,...string[]])})).min(1),
         format:z.enum(['vertical','horizontal']).optional().describe('voiceover only: the picture\'s shape; default the first footage\'s'),
@@ -189,12 +190,13 @@ export function localEditorServer(o:LocalEditorOptions,notify:()=>Notify):LocalE
         width:z.number().int().min(320).max(7680).optional().describe('delivered width, px (even)'),
         height:z.number().int().min(240).max(4320).optional().describe('delivered height, px (even)'),
         fps:z.number().positive().max(120).optional().describe('delivered frame rate'),
-        fit:z.enum(['contain','cover']).optional().describe('contain (default): whole picture, black bars; cover: fill and crop')},
-      run:async({out,width,height,fps,fit},ctx)=>{
+        fit:z.enum(['contain','cover']).optional().describe('contain (default): whole picture, black bars; cover: fill and crop'),
+        fast:z.boolean().optional().describe('copy passages of untouched footage straight from the source instead of encoding them (much faster for plain talk); off by default: only when the creator asks for a fast render')},
+      run:async({out,width,height,fps,fit,fast},ctx)=>{
         const {a,p,ws}=current();
         let last=-1;
         const output={...(width?{width}:{}),...(height?{height}:{}),...(fps?{fps}:{}),...(fit?{fit}:{})};
-        const r=await renderProject(a,p,ws,{...(out?{out}:{}),...(o.fontsDir?{fontsDir:o.fontsDir}:{}),output,progress:f=>{
+        const r=await renderProject(a,p,ws,{...(out?{out}:{}),...(fast?{fast:true}:{}),...(o.fontsDir?{fontsDir:o.fontsDir}:{}),output,progress:f=>{
           const pc=Math.round(f*100);
           if(pc!==last){last=pc;ctx.progress(pc,100,`rendering ${pc}%`);}
         }});
