@@ -12,6 +12,8 @@ import {libraryClip,librarySound,SFX_SOUND_IDS,SFX_SOUNDS,SFX_UNDER_VOICE,sfxWar
 import {proposeRule} from '../rules';
 import {clipOf,gestureTime,type SfxPlacement} from './cut';
 import {ff} from './look';
+import {SFX_MAX_SECONDS,SFX_RECIPE_IDS,SFX_RECIPES,SFX_VARIANTS,makeSfx,recipeGraph,type SfxRecipe} from '../../sfx-recipes';
+import {MAKE_SFX_DESCRIPTION} from './levels-sfx-skill-text';
 import {defineTool,type ToolDef} from './port';
 import type {Workspace} from './tools';
 
@@ -46,6 +48,35 @@ function gestureIds(doc:EditDoc):string[] {
 }
 
 /** Where a creator's effect file peaks and how loud, from its first seconds; library sounds are known. */
+/**
+ * make_sfx: render a recipe here, add it as an sfx clip (its file joins the project's sources, so the render finds it) and
+ * keep its measured peak for set_sfx. Local only: needs this computer's ffmpeg and a project folder.
+ */
+function makeSfxTool(ws:Workspace) {
+  const recipes=SFX_RECIPE_IDS.map(r=>`${r} (${SFX_RECIPES[r].about})`).join('; ');
+  return defineTool({name:'make_sfx',description:`${MAKE_SFX_DESCRIPTION} Recipes: ${recipes}.`,
+    input:{name:z.string().min(1).max(40).describe('short name, e.g. "whoosh-soft"; the clip id is sfx-<name>'),
+      recipe:z.enum(SFX_RECIPE_IDS as [SfxRecipe,...SfxRecipe[]]).optional().describe('a starter recipe'),
+      variant:z.number().int().min(0).max(SFX_VARIANTS.length-1).optional().describe(`0-${SFX_VARIANTS.length-1}: the recipe at another pitch (0 = as written)`),
+      graph:z.string().min(3).max(2000).optional().describe('your own ffmpeg lavfi audio graph instead of a recipe; end it on a fade-out'),
+      duration:z.number().gt(0).max(SFX_MAX_SECONDS).optional().describe('seconds at most; sources with d= end on their own')},
+    run:async({name,recipe,variant,graph,duration})=>{
+      if(!!recipe===!!graph)throw new Error('give a recipe or a graph, not both');
+      const g=graph??recipeGraph(recipe!,variant??0);
+      const made=await makeSfx(ff,join(ws.dir,'sfx'),name,g,duration);
+      const slug=`sfx-${name.replace(/[^\w-]+/g,'_')}`;
+      const same=ws.job.clips.find(c=>c.ref.hash===made.hash);
+      const id=same?.ref.id??(ws.job.clips.some(c=>c.ref.id===slug)?`${slug}-${made.hash.slice(0,6)}`:slug);
+      if(!same) {
+        ws.job.clips.push({ref:{id,hash:made.hash,name:`${name}.wav`,kind:'audio',role:'sfx',roleSource:'index',duration:made.duration,hasAudio:true,timecodeStart:0},words:[]});
+        if(ws.job.style.audio.sfx==='off')ws.job.style={...ws.job.style,audio:{...ws.job.style.audio,sfx:'subtle'}};
+      }
+      ws.media![made.hash]=made.path;
+      (ws.sfxPeaks??={})[id]={peak:made.peak,levelDb:made.levelDb};
+      return {text:`${id}: ${made.duration.toFixed(2)}s, peak @${made.peak.toFixed(2)}s at ${made.levelDb.toFixed(1)} dB${same?' (made before)':''}. Place it with set_sfx, sound "${id}".`};
+    }});
+}
+
 async function measured(ws:Workspace,sound:string):Promise<{clipId:string;peak:number;levelDb:number;label:string}> {
   if(isLibrary(sound)){const s=librarySound(sound);return {clipId:libraryClip(sound).id,peak:s.peak,levelDb:s.levelDb,label:sound};}
   const c=ws.job.clips.find(x=>x.ref.id===sound);
@@ -181,6 +212,7 @@ export function soundLookTools(ws:Workspace,change:Change):ToolDef<any>[] {
   ]);
   const videoClips=()=>ws.job.clips.filter(c=>c.ref.kind!=='audio');
   return [
+    ...(ws.media?[makeSfxTool(ws)]:[]),
     defineTool({name:'set_sfx',description:`Replace the sound effects: each hit lands with its loudest moment on a gesture (a graphic, text card or shot coming in, a zoom, a chapter, a word) and follows it through recuts; a hit whose gesture leaves the cut goes with it. Sounds: ${SFX_SOUND_IDS.map(s=>`${s} (${SFX_SOUNDS[s]})`).join('; ')}; or an sfx clip the creator gave. level: dB under the voice at the hit's peak (default per sound, -8 to -14). Few and on purpose: one sound per kind of gesture, impacts only on the big moments, none on plain lines. Empty hits = no effects; auto:true hands placement back to code.`,
       input:{hits:z.array(z.object({on,sound:z.string().describe('a library sound or an sfx clip id'),
           level:z.number().min(-30).max(-2).optional().describe('dB under the voice at the peak'),
