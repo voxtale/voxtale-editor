@@ -61,7 +61,8 @@ export interface RenderEditOptions {
   encoder?:VideoEncoder;
   /**
    * Stream-copy passages of one untouched source instead of encoding them
-   * (fast-copy.ts). Default on; off when the output is reshaped. The joined
+   * (fast-copy.ts). Opt-in (fast: true), default off until the joined file is checked
+   * in QuickTime; ignored when the output is reshaped. The joined
    * file is checked frame by frame count, and rendered again without copies if short.
    */
   fast?:boolean;
@@ -895,7 +896,7 @@ async function renderWith(o:RenderEditOptions,ffmpeg:string,ffprobe:string,enc:V
     const quality={crf:o.crf??18,preset:o.preset??'veryfast',width:plan.width,height:plan.height,fps:plan.fps};
     const encode=encodeArgs(enc,quality);
     // Copies only pay when the joined picture is not encoded again at the end.
-    const copies=o.fast!==false&&!reshape?await planCopies(plan,ffprobe,enc,o.signal):[];
+    const copies=o.fast===true&&!reshape?await planCopies(plan,ffprobe,enc,o.signal):[];
     const ts=copies.length>0;
     const chunks=mixedChunks(plan.frames,per,plan.holds,copies,chunkBounds);
     const sample=(frame:number)=>Math.round(frame/plan.fps*SAMPLE_RATE);

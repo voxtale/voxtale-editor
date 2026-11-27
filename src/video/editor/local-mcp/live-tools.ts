@@ -81,7 +81,7 @@ export function liveTools(d:LiveToolsDeps):McpTool[] {
   };
 
   return [
-    {name:'live_scan',description:'Index a finished livestream (8-12 h is fine): a local file or a URL (yt-dlp; only the sound is downloaded). Transcribes it in 30-min pieces with AssemblyAI (paid, about $0.15 per hour of live; pieces already done are never sent again), reads loudness, chat spikes, laughter, the streamer\'s markers and the most-replayed curve, and lists candidate moments in <folder>/.live/. A second call reuses all of it. Then live_candidates.',
+    {name:'live_scan',description:'Index a finished livestream (8-12 h is fine): a local file or a URL (yt-dlp; only the sound is downloaded). Transcribes it in 30-min pieces (free with the local Parakeet engine; about $0.15 per hour of live only on AssemblyAI; pieces already done are never sent again), reads loudness, chat spikes, laughter, the streamer\'s markers and the most-replayed curve, and lists candidate moments in <folder>/.live/. A second call reuses all of it. Then live_candidates.',
       input:{folder:z.string().optional().describe('where .live/ and the clip folders go; default the server\'s folder'),
         source:z.string().min(1).describe('the live: a file (absolute, or relative to folder) or a URL'),
         chat:z.string().optional().describe('chat file: TwitchDownloader JSON, chat-downloader JSON, YouTube live_chat JSON lines, or "[h:mm:ss] name: message" lines'),

@@ -152,13 +152,13 @@ describe.skipIf(!hasFfmpeg)('fast export',()=>{
     const d=newEditDoc({id:'f1',name:'Fast',clips:[c],fps,style:STYLE_PRESETS.tutorial});
     return parseEditDoc({...d,canvas:{width:W,height:H},tracks:{...d.tracks,'a-roll':[{id:'a1',clipId:'talk',in:0.5,out:5.5,start:0,end:5,owner:'agent'}]}}).doc;
   };
-  it('copies the untouched passage, every frame in place',async()=>{
+  it('copies the untouched passage with fast: true, every frame in place; off by default',async()=>{
     const fast=join(dir,'fast.mp4'),slow=join(dir,'slow.mp4');
-    const r=await renderEditDoc({doc:doc(),media,out:fast,work:join(dir,'w1'),encoder:sw});
+    const r=await renderEditDoc({doc:doc(),media,out:fast,work:join(dir,'w1'),encoder:sw,fast:true});
     expect(r.frames).toBe(150);
     expect(r.copiedFrames??0).toBeGreaterThanOrEqual(60);
     expect(r.encoder).toBe('libx264');
-    const s=await renderEditDoc({doc:doc(),media,out:slow,work:join(dir,'w2'),encoder:sw,fast:false});
+    const s=await renderEditDoc({doc:doc(),media,out:slow,work:join(dir,'w2'),encoder:sw});
     expect(s.copiedFrames).toBeUndefined();
     const count=(f:string)=>Number(new TextDecoder().decode(Bun.spawnSync(['ffprobe','-v','error','-count_frames','-select_streams','v:0','-show_entries','stream=nb_read_frames','-of','csv=p=0',f]).stdout).trim());
     expect(count(fast)).toBe(150);

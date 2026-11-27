@@ -85,8 +85,9 @@ export function spans(duration:number,o:{long?:number;piece?:number;pad?:number}
   return out;
 }
 
-const mid=(w:RawWord)=>(w.start+w.end)/2;
-const same=(x:RawWord,y:RawWord)=>Math.min(x.end,y.end)-Math.max(x.start,y.start)>0.5*Math.min(x.end-x.start,y.end-y.start);
+type Timed={start:number;end:number};
+const mid=(w:Timed)=>(w.start+w.end)/2;
+const same=(x:Timed,y:Timed)=>Math.min(x.end,y.end)-Math.max(x.start,y.start)>0.5*Math.min(x.end-x.start,y.end-y.start);
 
 /**
  * Words read on [a,b) (file time) replace the ones there; a word belongs to
@@ -94,7 +95,7 @@ const same=(x:RawWord,y:RawWord)=>Math.min(x.end,y.end)-Math.max(x.start,y.start
  * by two reads comes out once, never twice or not at all (60 ms apart was
  * enough to double it). from REDACTED REDACTED/transcribe.py merge_pass.
  */
-export function mergePass(words:RawWord[],fresh:RawWord[],a:number,b:number):RawWord[] {
+export function mergePass<W extends Timed>(words:W[],fresh:W[],a:number,b:number):W[] {
   const inside=fresh.filter(n=>a<=mid(n)&&mid(n)<b);
   const gone=new Set(words.filter(w=>(a<=mid(w)&&mid(w)<b)||inside.some(n=>same(w,n))));
   const taken=new Set(inside);
@@ -103,9 +104,9 @@ export function mergePass(words:RawWord[],fresh:RawWord[],a:number,b:number):Raw
 }
 
 /** The pieces' words on the input's clock, in order, each word once. `words` times are seconds from the piece's readFrom. */
-export function stitch(parts:{span:Span;words:RawWord[]}[]):RawWord[] {
+export function stitch<W extends Timed>(parts:{span:Span;words:W[]}[]):W[] {
   const sorted=[...parts].sort((x,y)=>x.span.from-y.span.from);
-  let out:RawWord[]=[];
+  let out:W[]=[];
   sorted.forEach(({span,words},i)=>{
     const shifted=words.map(w=>({...w,start:w.start+span.readFrom,end:w.end+span.readFrom}));
     // Only words near the seam are compared.

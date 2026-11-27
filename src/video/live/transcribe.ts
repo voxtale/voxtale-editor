@@ -1,8 +1,10 @@
 // Transcribing a whole livestream (8-12 h) in pieces: each 30-min piece is
 // read with 5 s more on each side, sent once, and kept in its own file, so a
 // crash or a stop never pays again for a piece already done. The pieces join
-// on word midpoints. Only the transcriber (AssemblyAI by default) costs money;
-// it and the audio cutter are injected so tests run offline.
+// on word midpoints (local-transcribe.ts spans/stitch, one implementation).
+// Each piece goes through transcribeAudio, which picks the engine: local
+// Parakeet is free; only AssemblyAI costs money. The transcriber and the
+// audio cutter are injected so tests run offline.
 import {createHash} from 'node:crypto';
 import {open,stat,mkdir} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
@@ -12,6 +14,7 @@ import {maybeJson,writeJson} from '../artifacts';
 import {ffmpegPath} from '../ffmpeg-path';
 import {run} from '../media';
 import {transcribeAudio,type Transcript} from '../transcript';
+import {spans,stitch} from '../local-transcribe';
 
 /** Longer than this goes in pieces. */
 export const LONG=45*60;
@@ -26,35 +29,18 @@ export type LiveTranscript=z.infer<typeof liveTranscriptSchema>;
 
 export interface Piece {index:number;from:number;to:number;readFrom:number;readTo:number}
 
-/** The pieces of a `duration`-second live: one for a short one, else PIECE-long with PAD read each side. */
+/** The pieces of a `duration`-second live: one for a short one, else PIECE-long with PAD read each side; a last sliver joins the piece before. */
 export function pieces(duration:number,o:{long?:number;piece?:number;pad?:number}={}):Piece[] {
-  const long=o.long??LONG,size=o.piece??PIECE,pad=o.pad??PAD;
-  if(duration<=long)return [{index:0,from:0,to:duration,readFrom:0,readTo:duration}];
-  const out:Piece[]=[];
-  for(let from=0,i=0;from<duration;from+=size,i++) {
-    // A last sliver joins the piece before it.
-    const to=duration-(from+size)<size/6?duration:from+size;
-    out.push({index:i,from,to,readFrom:Math.max(0,from-pad),readTo:Math.min(duration,to+pad)});
-    if(to===duration)break;
-  }
-  return out;
+  return spans(duration,{long:o.long??LONG,piece:o.piece??PIECE,pad:o.pad??PAD});
 }
 
 /**
  * The pieces' words on the live's clock, in order. A word belongs to the
- * piece its midpoint falls in, so words read twice near a seam (the pads)
- * are kept once. `words` times are seconds from the piece's readFrom.
+ * piece its midpoint falls in, and the same word read a little apart in two
+ * pads comes out once. `words` times are seconds from the piece's readFrom.
  */
 export function mergePieces(parts:{piece:Piece;words:LiveWord[]}[]):LiveWord[] {
-  const out:LiveWord[]=[];
-  for(const {piece,words} of [...parts].sort((a,b)=>a.piece.from-b.piece.from))
-    for(const w of words) {
-      const start=w.start+piece.readFrom,end=w.end+piece.readFrom,mid=(start+end)/2;
-      if(mid>=piece.from&&mid<piece.to)out.push({...w,start,end});
-    }
-  out.sort((a,b)=>a.start-b.start);
-  // Keep the transcript's rule: no word starts before the one before it.
-  return out;
+  return stitch(parts.map(p=>({span:p.piece,words:p.words})));
 }
 
 /** A cheap id for a huge file: its size and the sha256 of its first and last MiB. A full hash of 12 h of video takes minutes. */
@@ -76,7 +62,8 @@ export type PieceTranscriber=(audio:string,output:string,piece:{name:string;hash
 export const ffmpegCutter:AudioCutter=async(source,from,to,out)=>{
   await run(ffmpegPath(),['-v','error','-nostdin','-y','-ss',String(from),'-t',String(to-from),'-i',source,'-vn','-ac','1','-ar','16000','-c:a','flac',out]);
 };
-export const assemblyTranscriber:PieceTranscriber=(audio,output,piece)=>transcribeAudio(audio,output,piece);
+/** One piece through transcribeAudio's engine choice. The live already cut it to PIECE, so the local engine reads it whole. */
+export const pieceTranscriber:PieceTranscriber=(audio,output,piece)=>transcribeAudio(audio,output,piece,{local:{long:Infinity}});
 
 /**
  * The whole live's transcript in `dir` (transcript.json), piece by piece:
@@ -97,7 +84,7 @@ export async function transcribeLive(o:{source:string;duration:number;dir:string
     const out=`${stem}.json`,audio=`${stem}.flac`;
     o.progress?.(p.index,ps.length,existsSync(out)?`piece ${p.index+1}/${ps.length}: saved`:`piece ${p.index+1}/${ps.length}: transcribing`);
     if(!existsSync(out)&&!existsSync(`${out}.state.json`))await (o.cut??ffmpegCutter)(o.source,p.readFrom,p.readTo,audio);
-    const t=await (o.transcribe??assemblyTranscriber)(audio,out,{name:`${o.source}#${p.readFrom}-${p.readTo}`,hash:`${id}:${p.index}:${p.readFrom}-${p.readTo}`,duration:p.readTo-p.readFrom});
+    const t=await (o.transcribe??pieceTranscriber)(audio,out,{name:`${o.source}#${p.readFrom}-${p.readTo}`,hash:`${id}:${p.index}:${p.readFrom}-${p.readTo}`,duration:p.readTo-p.readFrom});
     parts.push({piece:p,words:t.words.map(w=>({text:w.text,start:w.start,end:w.end,confidence:w.confidence}))});
   }
   o.progress?.(ps.length,ps.length,'joining pieces');

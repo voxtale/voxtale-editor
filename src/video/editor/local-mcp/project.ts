@@ -421,7 +421,7 @@ export function coverVoice(doc:EditDoc):EditDoc {
 export const finalDoc=(p:Project,doc:EditDoc)=>p.voiceover?coverVoice(doc):doc;
 
 /** Render the cut to an MP4 (relative paths sit in the footage folder). Returns the file and what was left out. */
-export async function renderProject(a:At,p:Project,ws:Workspace,o:{out?:string;fontsDir?:string;progress?:(f:number)=>void;output?:OutputShape}):Promise<{file:string;seconds:number;skipped:string[];
+export async function renderProject(a:At,p:Project,ws:Workspace,o:{out?:string;fontsDir?:string;progress?:(f:number)=>void;output?:OutputShape;fast?:boolean}):Promise<{file:string;seconds:number;skipped:string[];
   /** Graphics meant behind the speaker, drawn over instead (no subject mask), and why. */
   unmasked:string[];
   /** What the file is, read back from it: size, frame rate, length. */
@@ -440,7 +440,7 @@ export async function renderProject(a:At,p:Project,ws:Workspace,o:{out?:string;f
   const graphics=Object.fromEntries(Object.entries(ws.graphics).filter(([,g])=>existsSync(g.webm)).map(([id,g])=>[id,g.webm]));
   const why=new Set<string>();
   const r=await renderEditDoc({doc:finalDoc(p,ws.doc),media:{...p.sources,...(ws.logo?.path?{[ws.logo.ref.hash]:ws.logo.path}:{})},graphics,out:file,work:join(a.dir,'render'),subjectMask:m=>nativeSubjectMask(m,w=>why.add(w)),
-    ...(o.fontsDir&&existsSync(o.fontsDir)?{fontsDir:o.fontsDir}:{}),...(o.progress?{progress:o.progress}:{}),...(o.output?{output:o.output}:{})});
+    ...(o.fontsDir&&existsSync(o.fontsDir)?{fontsDir:o.fontsDir}:{}),...(o.progress?{progress:o.progress}:{}),...(o.output?{output:o.output}:{}),...(o.fast?{fast:true}:{})});
   const seconds=(Date.now()-t0)/1000,i=await probe(file),[n,d]=i.rate.split('/').map(Number);
   const doc=ws.doc;
   const unmasked=r.skipped.filter(x=>x.reason==='subject-mask-missing').map(x=>x.itemId);

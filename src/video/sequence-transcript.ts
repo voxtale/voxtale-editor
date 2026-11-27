@@ -97,7 +97,7 @@ export async function transcribePassages(ff:Ff,dir:string,clips:SequenceClip[],p
     try {
       await ff(['-i',c.path,'-filter_complex',graph,'-map','[out]','-ac','1','-ar','16000','-c:a','flac',audio]);
       const total=placed.at(-1)!.at+(placed.at(-1)!.to-placed.at(-1)!.from)+PASSAGE_GAP;
-      const t=await transcribeAudio(audio,`${base}.json`,{name:`${c.id} passages`,hash:key,duration:total},{fetch:o.fetch,progress:o.progress,pollMs:o.pollMs});
+      const t=await transcribeAudio(audio,`${base}.json`,{name:`${c.id} passages`,hash:key,duration:total},{...(o.fetch?{fetch:o.fetch}:{}),...(o.progress?{progress:o.progress}:{}),...(o.pollMs!==undefined?{pollMs:o.pollMs}:{})});
       const m=mergeWords(c.words,toSource(t.words,placed));
       out.push({clipId:c.id,...m,seconds});
     } catch(e) {
