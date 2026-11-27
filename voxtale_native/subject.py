@@ -53,31 +53,45 @@ def subject_map(bgr: numpy.ndarray) -> numpy.ndarray:
     return cv2.GaussianBlur(cv2.resize((d0 * 255).astype(numpy.uint8), (width, height), interpolation=cv2.INTER_LINEAR), (0, 0), max(1.0, width / 640))
 
 
-def subject_mask_video(video: str, out: str, start: float, end: float, fps: float) -> dict:
-    """Mask frames for source seconds [start, end) at `fps`, written to `out`."""
-    _net()  # fail before reading any video when the model is absent
+def open_video(video: str, start: float) -> tuple["cv2.VideoCapture", int, int]:
+    """The capture at source second `start`, with the frame's width and height."""
     cap = cv2.VideoCapture(video)
     if not cap.isOpened():
         raise ValueError(f"cannot open {video}")
+    cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, start) * 1000)
+    return cap, int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+
+def frames_at(cap: "cv2.VideoCapture", start: float, fps: float, count: int):
+    """(source frame, fresh) per output frame from `start` at `fps`: the source frame showing at start + k/fps.
+    fresh is False while the source is slower and the frame repeats. Stops early at the end of the video."""
+    frame, at = None, None
+    for k in range(count):
+        t = start + k / fps
+        fresh = False
+        while at is None or at + 1e-4 < t:
+            ok, next_frame = cap.read()
+            if not ok:
+                break
+            frame, at, fresh = next_frame, cap.get(cv2.CAP_PROP_POS_MSEC) / 1000, True
+        if frame is None:
+            return
+        yield frame, fresh
+
+
+def subject_mask_video(video: str, out: str, start: float, end: float, fps: float) -> dict:
+    """Mask frames for source seconds [start, end) at `fps`, written to `out`."""
+    _net()  # fail before reading any video when the model is absent
+    cap, width, height = open_video(video, start)
     try:
-        cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, start) * 1000)
-        width, height = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         writer = cv2.VideoWriter(out, cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height), isColor=False)
         if not writer.isOpened():
             raise ValueError(f"cannot write {out}")
         count = max(1, round((end - start) * fps))
-        frame, mask, at = None, None, None
-        for k in range(count):
-            t = start + k / fps
-            # Read forward to the source frame showing at t; reuse its mask when the source is slower.
-            while at is None or at + 1e-4 < t:
-                ok, next_frame = cap.read()
-                if not ok:
-                    break
-                frame, at, mask = next_frame, cap.get(cv2.CAP_PROP_POS_MSEC) / 1000, None
-            if frame is None:
-                break
-            if mask is None:
+        mask = None
+        # Reuse a frame's mask while the source frame repeats.
+        for frame, fresh in frames_at(cap, start, fps, count):
+            if fresh or mask is None:
                 mask = subject_map(frame)
             writer.write(mask)
         writer.release()

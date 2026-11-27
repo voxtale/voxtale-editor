@@ -11,6 +11,9 @@ video to ``out`` (voxtale_native/subject.py); ``subject_still`` reads
 speaker's place per sampled frame (auto reframe); ``track_point`` reads
 {video, start, end, at, point, zone?} and writes a set point's path (title
 motion tracking). See track.py.
+``objects`` reads {video, out, start, end, fps, objects, subject} and writes the subject mask with picked objects
+added or cut out (voxtale_native/objects.py); ``objects_still`` reads {image, out, objects, subject, overlay} and
+writes one still's mask, plus an overlay the agent looks at to check its pick.
 """
 
 from __future__ import annotations
@@ -56,7 +59,21 @@ def _track_point(req: dict) -> dict:
     return track_point(req["video"], float(req["start"]), float(req["end"]), float(req["at"]), req["point"], req.get("zone"))
 
 
-OPS = {"faces": _faces, "analyse": _analyse, "subject": _subject, "subject_still": _subject_still, "subject_path": _subject_path, "track_point": _track_point}
+def _objects(req: dict) -> dict:
+    from voxtale_native.objects import objects_mask_video
+
+    return objects_mask_video(req["video"], req["out"], float(req["start"]), float(req["end"]), float(req["fps"]),
+                              list(req.get("objects") or []), bool(req.get("subject", True)))
+
+
+def _objects_still(req: dict) -> dict:
+    from voxtale_native.objects import objects_still
+
+    return objects_still(req["image"], req["out"], list(req.get("objects") or []), bool(req.get("subject", False)), req.get("overlay"))
+
+
+OPS = {"faces": _faces, "analyse": _analyse, "subject": _subject, "subject_still": _subject_still,
+       "subject_path": _subject_path, "track_point": _track_point, "objects": _objects, "objects_still": _objects_still}
 
 
 def main(argv: list[str]) -> int:

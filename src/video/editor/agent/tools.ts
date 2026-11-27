@@ -8,7 +8,7 @@ import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import type {StackSpan} from '../../live/stack';
 import {z} from 'zod/v4';
-import {BEAT_CONFIDENCE_MIN,CAPTION_PRESETS,CAPTION_PRESET_IDS,PIP_CORNERS,TRANSITION_KINDS,ZOOM_CURVES,VARIANTS_MAX,fixedWord,keepCreatorItems,keepText,withCaptionPreset,type CaptionPresetId,type EditDoc,type GraphicItem,type KeepReport,type WordFix} from '@voxtale/editdoc';
+import {BEAT_CONFIDENCE_MIN,CAPTION_PRESETS,CAPTION_PRESET_IDS,PIP_CORNERS,TRANSITION_KINDS,ZOOM_CURVES,VARIANTS_MAX,MASK_OBJECTS_MAX,fixedWord,keepCreatorItems,keepText,withCaptionPreset,type CaptionPresetId,type EditDoc,type GraphicItem,type KeepReport,type WordFix} from '@voxtale/editdoc';
 import {footageText,rankFootage,rankText,screenActivity,screenSummary,shownMeanwhile} from './footage';
 import {deliveryOf,deliveryTable} from '../../delivery';
 import {levelGains,speechLevel} from '../../levels';
@@ -21,7 +21,9 @@ import {afterClose,buildCut,checkCut,clipOf,cutSound,faceAt,packTranscript,type 
 import type {FrameHost} from './frames';
 import {defineTool,type ToolDef,type ToolResult} from './port';
 import {ff} from './look';
-import {drawPreview,previewShots,previewTimes,PREVIEW_MAX} from './preview';
+import {drawPreview,previewShots,previewTimes,PREVIEW_MAX,type Cutout} from './preview';
+import {objectTools,objectPromptSchema,type ObjectPicker} from './object-tools';
+import {MASK_OBJECTS_FIELD} from './object-mask-skill';
 import {changedMoments,CHANGED_MAX} from './changes';
 import {legibilityWarnings,textSheet} from './legible';
 import {faceWarnings} from './face-text';
@@ -70,7 +72,11 @@ export interface Workspace {
   /** Finds the speaker's eyes at cut frames; results cached by clip and time. */
   eyes?:EyeFinder;
   /** Masks the speaker in a preview still, so watch_cut shows text behind them as the export does. */
-  cutout?:(still:string,out:string)=>Promise<boolean>;
+  cutout?:Cutout;
+  /** Segments picked objects on a still (pick_object); absent without the object model's bridge. */
+  picker?:ObjectPicker;
+  /** pick_object calls so far (names its files). */
+  picks?:number;
   eyeCache?:Map<string,Point|null>;
   /** Saves so far, and the save the agent last watched the cut at. */
   edits?:number;
@@ -610,9 +616,15 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
     defineTool({name:'place_graphic',description:'Put a rendered graphic on the timeline, starting on a source word (it follows that word through recuts; dropped if the word is cut). Same id again moves it.',
       input:{id:z.string(),clip:z.string(),word:z.number().int(),seconds:z.number().min(0.5).max(15),
         reason:z.string().max(200),fade:fadeField,
-        behindSubject:z.boolean().optional().describe('text behind the speaker: the speaker is cut out and drawn over the graphic at export (a full-frame graphic with see-through around its text; needs the subject mask model, else drawn over and reported)')},
+        behindSubject:z.boolean().optional().describe('text behind the speaker: the speaker is cut out and drawn over the graphic at export (a full-frame graphic with see-through around its text; needs the subject mask model, else drawn over and reported)'),
+        maskObjects:z.array(objectPromptSchema.extend({clip:z.string(),t:z.number().min(0)})).max(MASK_OBJECTS_MAX).optional().describe(MASK_OBJECTS_FIELD)},
       run:async(p)=>{
         if(!ws.graphics[p.id])throw new Error(`graphic ${p.id} has not rendered; call make_graphic, render_graphic or render_scene first`);
+        for(const o of p.maskObjects??[]) {
+          const c=clipOf(ws.job,o.clip);
+          if(o.t>=c.ref.duration)throw new Error(`mask object on ${o.clip} at ${o.t}s: the clip is ${c.ref.duration.toFixed(2)}s long`);
+          if(!o.points?.length&&!o.box)throw new Error('each mask object needs points or a box');
+        }
         if(!ws.segments.length)throw new Error('set a cut first');
         const had=ws.placements.find(x=>x.id===p.id);
         await change(ws,()=>{ws.placements=[...ws.placements.filter(x=>x.id!==p.id),{...p,...(had?.variants?{variants:had.variants}:{}),...(had?.shows?{shows:had.shows}:{})}];},{named:[`g-${p.id}`]});
@@ -748,6 +760,7 @@ export function editorTools(ws:Workspace):ToolDef<any>[] {
   tools.push(...mediaTools(ws,(w,f)=>change(w,f)));
   tools.push(...logoTools(ws,(w,f)=>change(w,f)));
   tools.push(...trackTools(ws,(w,f)=>change(w,f)));
+  tools.push(...objectTools(ws));
   tools.push(defineTool({name:'finish',description:'End the edit. Call once, after check_cut shows no problems you can fix. Say what you cut, why, and any problem you chose to leave.',
     input:{summary:z.string().min(20).max(2000),
       notes:z.array(z.object({id:z.string().max(120),reply:z.string().min(1).max(REPLY_MAX*2)})).max(100).optional()

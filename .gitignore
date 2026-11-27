@@ -19,3 +19,7 @@ bench/**/*.log
 
 # DJI D-Log M LUTs: tools/fetch-dji-luts.sh (DJI's licence; not committed)
 models/luts/
+
+# MobileSAM ONNX for object picks: tools/fetch-object-model.sh (44 MB, not committed)
+models/mobile_sam_image_encoder.onnx
+models/sam_mask_decoder_single.onnx

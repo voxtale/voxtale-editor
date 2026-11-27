@@ -314,10 +314,10 @@ export function buildExportTimeline(doc: EditDoc, media: ExportMedia): ExportTim
   }
   if (speaker.length) video.push({ name: "Speaker", kind: "video", role: "speaker-pip", clips: speaker.sort((a, b) => a.start - b.start) });
 
-  // ---- graphics: rendered overlays; behindSubject needs a mask no adapter has
+  // ---- graphics: rendered overlays; behindSubject or added maskObjects need a mask no adapter has
   const rendered = shown(doc.tracks.graphics).flatMap(g => {
     use("graphics", g.id);
-    if (g.behindSubject) use("behind-subject", g.id);
+    if (g.behindSubject || g.maskObjects?.some(o => o.mode === "add")) use("behind-subject", g.id);
     const m = media.graphicPath?.(g);
     if (!m) warnings.push({ itemId: g.id, note: "graphic not rendered: left out" });
     return m ? [{ g, m, start: g.start, end: g.end }] : [];

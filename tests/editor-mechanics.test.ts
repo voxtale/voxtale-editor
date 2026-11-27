@@ -47,14 +47,31 @@ describe('EditDoc v4',()=>{
     const v3={...doc(),version:3};
     const up=upgradeEditDoc(v3) as EditDoc;
     expect(up.version).toBe(EDITDOC_VERSION);
-    expect(EDITDOC_VERSION).toBe(9);
+    expect(EDITDOC_VERSION).toBe(10);
     expect(parseEditDoc(v3).doc.tracks['a-roll']).toEqual(doc().tracks['a-roll']);
   });
   it('lifts a v5 doc by its number only (v6 adds graphics behindSubject)',()=>{
     expect((upgradeEditDoc({...doc(),version:5}) as EditDoc).version).toBe(EDITDOC_VERSION);
     expect((upgradeEditDoc({...doc(),version:6}) as EditDoc).version).toBe(EDITDOC_VERSION);
+    expect((upgradeEditDoc({...doc(),version:7}) as EditDoc).version).toBe(EDITDOC_VERSION);
     expect(parseEditDoc({...doc(),version:6}).doc.logos).toEqual([]);
     expect(parseEditDoc({...doc(),version:5}).doc.tracks['a-roll']).toEqual(doc().tracks['a-roll']);
+  });
+});
+
+describe('EditDoc v10',()=>{
+  const g={id:'g1',assetId:'ga-1',start:0.5,end:1.5,owner:'agent',placement:'full'};
+  const withGraphic=(version:number,over:Record<string,unknown>={})=>{const d=doc();return {...d,version,tracks:{...d.tracks,graphics:[{...g,...over}]}};};
+  it('lifts a v7 doc with a graphic unchanged but for the number',()=>{
+    const up=parseEditDoc(withGraphic(7,{behindSubject:true})).doc;
+    expect(up.version).toBe(10);
+    expect(up.tracks.graphics[0]).toMatchObject({...g,behindSubject:true});
+    expect(up.tracks.graphics[0]!.maskObjects).toBeUndefined();
+  });
+  it('lifts a v8 from either branch: maskObjects (object picks) or reframe and track',()=>{
+    const mask=[{mode:'add',clipId:'grey',t:2.5,points:[[0.5,0.5]]}];
+    expect(parseEditDoc(withGraphic(8,{maskObjects:mask})).doc.tracks.graphics[0]!.maskObjects).toEqual(mask as never);
+    expect(parseEditDoc(withGraphic(9,{maskObjects:mask})).doc.version).toBe(10);
   });
 });
 

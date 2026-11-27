@@ -191,10 +191,11 @@ describe('EditDoc v9 stack',()=>{
   const stack={top:{x:0,y:0,w:0.25,h:0.25},bottom:{x:0.3,y:0,w:0.3,h:1},split:0.35};
   const doc=(items:unknown[]):EditDoc=>{const d=newEditDoc({id:'e',name:'t',clips:[clip],fps,style:STYLE_PRESETS.tutorial});
     return parseEditDoc({...d,canvas:{width:1080,height:1920},tracks:{...d.tracks,'a-roll':items}}).doc;};
-  it('is version 9 and lifts v8',()=>{
-    expect(EDITDOC_VERSION).toBe(9);
+  it('is version 10 and lifts v8 and v9',()=>{
+    expect(EDITDOC_VERSION).toBe(10);
     const d=doc([{id:'a1',clipId:'c1',in:0,out:10,start:0,end:10,owner:'agent'}]);
-    expect((upgradeEditDoc({...d,version:8}) as EditDoc).version).toBe(9);
+    expect((upgradeEditDoc({...d,version:8}) as EditDoc).version).toBe(10);
+    expect((upgradeEditDoc({...d,version:9}) as EditDoc).version).toBe(10);
   });
   it('applyStacks splits at span edges and keeps fades on the ends',()=>{
     const d=doc([{id:'a1',clipId:'c1',in:2,out:12,start:0,end:10,owner:'agent',fadeIn:0.2,fadeOut:0.3}]);

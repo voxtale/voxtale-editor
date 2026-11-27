@@ -100,6 +100,15 @@ describe('export model',()=>{
   });
 });
 
+describe('export: graphics behind picked objects',()=>{
+  const with_=(g:Record<string,unknown>)=>{const d=sample();return {...d,tracks:{...d.tracks,graphics:[{...d.tracks.graphics[0]!,behindSubject:false,...g}]}} as EditDoc;};
+  it('flags added maskObjects like behindSubject; remove-only does not',()=>{
+    const add=[{mode:'add' as const,clipId:sample().tracks['a-roll'][0]!.clipId,t:1,points:[[0.5,0.5]] as [number,number][]}];
+    expect(buildExportTimeline(with_({maskObjects:add}),media).uses['behind-subject']).toEqual(['g1']);
+    expect(buildExportTimeline(with_({maskObjects:[{...add[0]!,mode:'remove'}]}),media).uses['behind-subject']).toBeUndefined();
+  });
+});
+
 describe('export port',()=>{
   it('reports what each target cannot carry',()=>{
     const by=Object.fromEntries(EXPORT_TARGETS.map(k=>[k,exportTimeline(sample(),media,k).losses.map(l=>l.feature)]));

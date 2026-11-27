@@ -74,6 +74,22 @@ describe('planRender',()=>{
     // Not marked: nothing changes.
     expect(planRender(doc({graphics:[{id:'g1',assetId:'ga-1',start:0.5,end:2.5,owner:'agent'}]}),media,{'ga-1':'/g.webm'},{},masks).pictures.some(x=>x.mask)).toBe(false);
   });
+  it('picked objects: an add object alone puts the graphic behind it on its own clip; remove alone does nothing',()=>{
+    const head={mode:'add' as const,clipId:'red',t:0.5,box:[0.4,0.1,0.2,0.3] as [number,number,number,number]};
+    const spans=subjectSpans(doc({graphics:[{id:'g1',assetId:'ga-1',start:0.5,end:2.5,owner:'agent',maskObjects:[head]}]}));
+    expect(spans.map(x=>[x.arollId,x.subject,x.objects.length])).toEqual([['a1',false,1],['a1',false,1]]);
+    expect(spans[0]!.objects[0]).toEqual({mode:'add',t:0.5,box:[0.4,0.1,0.2,0.3]});
+    const hand={...head,mode:'remove' as const};
+    expect(subjectSpans(doc({graphics:[{id:'g1',assetId:'ga-1',start:0.5,end:2.5,owner:'agent',maskObjects:[hand]}]}))).toEqual([]);
+    // With the person: every a-roll piece, objects only where their clip shows.
+    const both=subjectSpans(doc({graphics:[{id:'g1',assetId:'ga-1',start:0.5,end:2.5,owner:'agent',behindSubject:true,maskObjects:[hand]}]}));
+    expect(both.map(x=>[x.arollId,x.subject,x.objects.length])).toEqual([['a1',true,1],['a1',true,1],['a2',true,0]]);
+  });
+  it('a mask object needs points or a box',()=>{
+    const g=(o:object)=>doc({graphics:[{id:'g1',assetId:'ga-1',start:0.5,end:2.5,owner:'agent',maskObjects:[{mode:'add',clipId:'red',t:0.5,...o}]}]});
+    expect(()=>g({exclude:[[0.5,0.5]]})).toThrow();
+    expect(()=>g({points:[[0.5,0.5]]})).not.toThrow();
+  });
   it('writes text and captions as ASS events on frame edges',()=>{
     const d=doc({
       text:[{id:'t1',start:1,end:2,text:'Hello {x}',template:'callout',owner:'agent'}],

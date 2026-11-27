@@ -5,16 +5,18 @@
 // groups (cameras and mics recorded together), a piece's angle, mic and
 // split / picture-in-picture layout, a clip's sound offset and its colour
 // space (log, HDR, input LUT), and a graphic's behindSubject (text behind
-// the speaker), all optional (`upgradeEditDoc` lifts v2-v5). v7 added
+// the speaker), all optional (`upgradeEditDoc` lifts v2-v9). v7 added
 // logos; v8 a clip's auto-reframe path and a text or graphic's motion track;
-// v9 the a-roll "stack" layout (webcam over gameplay from one picture).
+// v9 the a-roll "stack" layout (webcam over gameplay from one picture); v10 a
+// graphic's maskObjects (objects picked by point or box, added to or cut out
+// of the mask drawn back over it).
 // Pure zod; no I/O. Times are seconds, frame-snapped by `validateEditDoc`.
 import { z } from "zod";
 import { fpsSchema } from "./time";
 import { cssColor, editStyleSchema, fontWeight } from "./style";
 import { gradeSchema } from "./grade";
 
-export const EDITDOC_VERSION = 9 as const;
+export const EDITDOC_VERSION = 10 as const;
 
 const id = z.string().regex(/^[A-Za-z0-9_.:~-]{1,120}$/); // "~" marks suggestion ids ("a1~r4")
 const time = z.number().finite().nonnegative();
@@ -303,6 +305,26 @@ export const textItemSchema = z.object({
   track: motionTrackSchema.optional(),
   ...pictureFade,
 }).strict();
+const frac = z.number().min(0).max(1);
+/** Most objects one graphic's mask picks. */
+export const MASK_OBJECTS_MAX = 8;
+/**
+ * An object picked on one still of a clip and followed both ways from it: added to the mask drawn back over a graphic
+ * (text behind a lamp, or behind the head alone) or cut out of it (a hand that should stay behind the text).
+ * Points and box are fractions of the source frame.
+ */
+export const maskObjectSchema = z.object({
+  mode: z.enum(["add", "remove"]),
+  clipId: id,
+  /** Source second of the still it was picked on. */
+  t: time,
+  points: z.array(z.tuple([frac, frac])).max(8).optional(),
+  /** Points that are not the object. */
+  exclude: z.array(z.tuple([frac, frac])).max(8).optional(),
+  /** x, y of the top-left corner, w, h. */
+  box: z.tuple([frac, frac, frac, frac]).optional(),
+}).strict().refine(o => (o.points?.length ?? 0) > 0 || !!o.box, "a mask object needs points or a box");
+export type MaskObject = z.infer<typeof maskObjectSchema>;
 export const graphicItemSchema = z.object({
   ...itemBase,
   assetId: id,                            // graphicsAssets row; holds source, props, renders
@@ -318,6 +340,11 @@ export const graphicItemSchema = z.object({
   behindSubject: z.boolean().optional(),
   /** Pinned to a spot of the set: follows it as the camera moves (v8). */
   track: motionTrackSchema.optional(),
+  /**
+   * Objects added to that mask or cut out of it; an added object draws the graphic behind it even without
+   * behindSubject (then the mask is the objects alone). Needs the object model, else left out and reported (v10).
+   */
+  maskObjects: z.array(maskObjectSchema).max(MASK_OBJECTS_MAX).optional(),
   ...pictureFade,
 }).strict();
 export const musicItemSchema = z.object({
@@ -618,15 +645,17 @@ function liftZoom(item: Raw, keys: V2Key[]): Raw | undefined {
  * Bring an older document up to EDITDOC_VERSION before parsing. v2 → v3: each
  * a-roll item's zoom keys become one item on the zoom track. v3 → v4: every
  * new field is optional, so only the number changes. Anything else passes
- * through for the schema to judge. v4 → v5 ... v8 → v9: new fields
- * are optional (groups, angles, avOffset, graphics behindSubject; v7 logos).
- * v7 → v8: a clip's reframe and an item's track are optional too.
+ * through for the schema to judge. v4 → v5 ... v9 → v10: new fields
+ * are optional (groups, angles, avOffset, graphics behindSubject; v7 logos;
+ * v8 a clip's reframe and an item's track; v9 stack layout; v10 graphics
+ * maskObjects). A v8 written by the old object-mask branch (maskObjects, no
+ * reframe) lifts the same way: both fields are optional.
  */
 export function upgradeEditDoc(input: unknown): unknown {
   const doc = input as Raw | null;
   if (!doc || typeof doc !== "object") return input;
   if (doc.version === 2) return upgradeEditDoc(upgradeV2(doc));
-  if (doc.version === 3 || doc.version === 4 || doc.version === 5 || doc.version === 6 || doc.version === 7 || doc.version === 8) return { ...doc, version: EDITDOC_VERSION };
+  if (doc.version === 3 || doc.version === 4 || doc.version === 5 || doc.version === 6 || doc.version === 7 || doc.version === 8 || doc.version === 9) return { ...doc, version: EDITDOC_VERSION };
   return input;
 }
 
