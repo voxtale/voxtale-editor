@@ -421,7 +421,9 @@ export async function renderProject(a:At,p:Project,ws:Workspace,o:{out?:string;f
   /** What the file is, read back from it: size, frame rate, length. */
   actual:{width:number;height:number;fps:number;duration:number};
   /** Integrated loudness and true peak, as built and as delivered. */
-  loudness:string[];graded:string[]}> {
+  loudness:string[];graded:string[];
+  /** Output frames, the encoder used, frames stream-copied from the footage. */
+  frames:number;encoder?:string;copiedFrames?:number}> {
   if(!ws.doc)throw new Error('no cut yet: set_cut first');
   // Every kept segment at one speech level (finish does this too; measured once, kept in state.json).
   await matchLevels(ws);
@@ -437,7 +439,8 @@ export async function renderProject(a:At,p:Project,ws:Workspace,o:{out?:string;f
   const doc=ws.doc;
   const unmasked=r.skipped.filter(x=>x.reason==='subject-mask-missing').map(x=>x.itemId);
   return {file,seconds,skipped:r.skipped.filter(x=>x.reason==='graphic-not-ready').map(x=>x.itemId),unmasked:unmasked.length?[...unmasked,...why]:[],actual:{width:i.width??0,height:i.height??0,fps:n&&d?n/d:0,duration:i.duration},
-    loudness:r.loudness?loudnessReport(r.loudness,{lufs:doc.mix.loudnessLufs,truePeakDb:doc.mix.truePeakDb}):[],graded:r.graded??[]};
+    loudness:r.loudness?loudnessReport(r.loudness,{lufs:doc.mix.loudnessLufs,truePeakDb:doc.mix.truePeakDb}):[],graded:r.graded??[],
+    frames:r.frames,...(r.encoder?{encoder:r.encoder}:{}),...(r.copiedFrames?{copiedFrames:r.copiedFrames}:{})};
 }
 
 /** Frames of a rendered video in a grid, to check what the viewer sees. */
